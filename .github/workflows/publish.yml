@@ -1,0 +1,212 @@
+name: publish
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    name: Build, test & pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Set version from tag
+        run: |
+          "VERSION=$( $env:GITHUB_REF_NAME -replace '^v', '' )" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+
+      - name: Test
+        run: dotnet test FlexibleArray.slnx -c Release
+
+      - name: Pack
+        run: dotnet pack FlexibleArray/FlexibleArray.csproj -c Release --nologo -o pkg -p:Version=$env:VERSION
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: pkg
+          path: |
+            pkg/*.nupkg
+            pkg/*.snupkg
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to nuget.org + GitHub release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      attestations: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          name: pkg
+          path: pkgs
+
+      - name: Validate tag is SemVer and not a downgrade
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$')
+          {
+            throw "tag '$env:GITHUB_REF_NAME' is not a valid vX.Y.Z[(-suffix)] version"
+          }
+          $candidateV = [semver]::new($version)
+          "VERSION=$version" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          $index = try
+          {
+            Invoke-RestMethod -Uri 'https://api.nuget.org/v3-flatcontainer/flexiblearray/index.json' -TimeoutSec 30
+          }
+          catch
+          {
+            $null
+          }
+          if ($index -and ($index.versions -contains $version))
+          {
+            throw "version '$version' is already published on nuget.org — refusing to republish (traceability tag only)"
+          }
+          git fetch origin main
+          $onMain = $false
+          try
+          {
+            git merge-base --is-ancestor "$env:GITHUB_SHA" origin/main 2> $null
+            $onMain = ($LASTEXITCODE -eq 0)
+          }
+          catch
+          {
+            $global:LASTEXITCODE = 0
+            $onMain = $false
+          }
+          if (-not $onMain)
+          {
+            throw "tag commit $env:GITHUB_SHA is not an ancestor of origin/main"
+          }
+          $run = try
+          {
+            gh run list --workflow ci.yml --commit "$env:GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId' 2> $null
+          }
+          catch
+          {
+            $global:LASTEXITCODE = 0
+            $null
+          }
+          if (-not $run)
+          {
+            throw "no successful ci.yml run found for tag commit $env:GITHUB_SHA"
+          }
+          Write-Host "ok: tag commit is on main with green CI (run $run)"
+          $latest = try
+          {
+            gh release list --limit 1 --json tagName --jq '.[0].tagName' 2> $null
+          }
+          catch
+          {
+            $global:LASTEXITCODE = 0
+            $null
+          }
+          if ($latest)
+          {
+            $latestV = $latest -replace '^v', ''
+            $previousV = [semver]::new($latestV)
+            if ($candidateV -le $previousV)
+            {
+              throw "version '$version' is not newer than the latest release '$latestV'"
+            }
+            Write-Host "ok: $version > $latestV"
+          }
+          else
+          {
+            Write-Host 'no previous release; this is the first publish'
+          }
+          exit 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            pkgs/FlexibleArray.${{ env.VERSION }}.nupkg
+            pkgs/FlexibleArray.${{ env.VERSION }}.snupkg
+
+      - name: NuGet login (OIDC -> temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish to nuget.org
+        run: dotnet nuget push "pkgs/FlexibleArray.$env:VERSION.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$env:NUGET_API_KEY"
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+
+      - name: Create GitHub release
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" --title "$env:GITHUB_REF_NAME" `
+            --notes "See https://www.nuget.org/packages/FlexibleArray/$env:VERSION for package details." `
+            "pkgs/FlexibleArray.$env:VERSION.nupkg" "pkgs/FlexibleArray.$env:VERSION.snupkg"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Move published API into Shipped (housekeeping PR)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $tagUnshipped = @(Get-Content 'FlexibleArray/PublicAPI.Unshipped.txt' | Where-Object { $_ -and -not $_.StartsWith('#') })
+          if ($tagUnshipped.Count -eq 0)
+          {
+            Write-Host 'no unshipped API on this tag; nothing to move'
+            exit 0
+          }
+          git fetch origin main
+          git checkout -b "housekeeping/shipped-v$env:VERSION" FETCH_HEAD
+          $shippedPath = 'FlexibleArray/PublicAPI.Shipped.txt'
+          $unshippedPath = 'FlexibleArray/PublicAPI.Unshipped.txt'
+          $shipped = @(Get-Content $shippedPath | Where-Object { $_ -and -not $_.StartsWith('#') })
+          $unshipped = @(Get-Content $unshippedPath | Where-Object { $_ -and -not $_.StartsWith('#') })
+          $removedPrefix = '*REMOVED*'
+          $tagAdditions = @($tagUnshipped | Where-Object { -not $_.StartsWith($removedPrefix) })
+          $tagRemovals = @($tagUnshipped | Where-Object { $_.StartsWith($removedPrefix) } | ForEach-Object { $_.Substring($removedPrefix.Length) })
+          $remainingShipped = @($shipped | Where-Object { $_ -notin $tagRemovals })
+          $newShipped = @(($remainingShipped + $tagAdditions) | Select-Object -Unique)
+          $newUnshipped = @($unshipped | Where-Object { $_ -notin $tagUnshipped })
+          $key = { param($s) ($s -replace '^\*REMOVED\*', '') -replace '^(static |override )', '' }
+          $newShipped = @($newShipped | Sort-Object -Property @{ Expression = $key })
+          $newUnshipped = @($newUnshipped | Sort-Object -Property @{ Expression = $key })
+          "#nullable enable`n$( $newShipped -join "`n" )`n" | Set-Content -Path $shippedPath -NoNewline
+          "#nullable enable`n$( $newUnshipped -join "`n" )`n" | Set-Content -Path $unshippedPath -NoNewline
+          git add $shippedPath $unshippedPath
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' `
+            commit -m "chore: move shipped API to Shipped for $env:GITHUB_REF_NAME"
+          git push -u origin "housekeeping/shipped-v$env:VERSION"
+          gh pr create --base main --head "housekeeping/shipped-v$env:VERSION" `
+            --title "chore: move shipped API to Shipped for $env:GITHUB_REF_NAME" `
+            --body "Publish-time housekeeping: the API shipped in $env:GITHUB_REF_NAME moves from Unshipped to Shipped (the entries present on the tag commit)."
+          gh pr merge --merge
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="FlexibleArray/FlexibleArray.csproj" />
+  <Project Path="FlexibleArray.Tests/FlexibleArray.Tests.csproj" />
+</Solution>
