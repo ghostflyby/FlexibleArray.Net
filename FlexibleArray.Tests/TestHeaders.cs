@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace FlexibleArray.Tests;
@@ -11,7 +12,7 @@ public struct PacketHeader : IFlexibleArrayHeader<PacketHeader, int>
     public int FirstElement;
 
     public static ref int GetFirstElement(ref PacketHeader header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<PacketHeader, int> array) => array.Header.Count;
+    public static int GetTailLength(scoped in PacketHeader header) => header.Count;
 }
 
 /// <summary>
@@ -25,7 +26,9 @@ public struct DoubleTagOriginal : IFlexibleArrayHeader<DoubleTagOriginal, int>
     public int FirstElement;
 
     public static ref int GetFirstElement(ref DoubleTagOriginal header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<DoubleTagOriginal, int> array) => array.Length;
+
+    // Layout-only fixture: no self-describing length, so the tail is always empty.
+    public static int GetTailLength(scoped in DoubleTagOriginal header) => 0;
 }
 
 /// <summary>The split-off plain header: double + byte; trailing padding rounds the size to 16.</summary>
@@ -53,7 +56,9 @@ public struct PackedHeader : IFlexibleArrayHeader<PackedHeader, int>
     public int FirstElement;
 
     public static ref int GetFirstElement(ref PackedHeader header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<PackedHeader, int> array) => array.Length;
+
+    // Layout-only fixture: no self-describing length, so the tail is always empty.
+    public static int GetTailLength(scoped in PackedHeader header) => 0;
 }
 
 /// <summary>C definition struct { long a; char b; short items[]; }: items at offset 10.</summary>
@@ -65,7 +70,9 @@ public struct LongByteShortOriginal : IFlexibleArrayHeader<LongByteShortOriginal
     public short FirstElement;
 
     public static ref short GetFirstElement(ref LongByteShortOriginal header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<LongByteShortOriginal, short> array) => array.Length;
+
+    // Layout-only fixture: no self-describing length, so the tail is always empty.
+    public static int GetTailLength(scoped in LongByteShortOriginal header) => 0;
 }
 
 /// <summary>A nested struct with trailing padding: long + byte, size 16.</summary>
@@ -84,7 +91,9 @@ public struct NestedContainerHeader : IFlexibleArrayHeader<NestedContainerHeader
     public int FirstElement;
 
     public static ref int GetFirstElement(ref NestedContainerHeader header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<NestedContainerHeader, int> array) => array.Length;
+
+    // Layout-only fixture: no self-describing length, so the tail is always empty.
+    public static int GetTailLength(scoped in NestedContainerHeader header) => 0;
 }
 
 /// <summary>Non-blittable unmanaged element type: managed sizeof(char) = 2, offset 4, header size 8.</summary>
@@ -95,7 +104,7 @@ public struct CharHeader : IFlexibleArrayHeader<CharHeader, char>
     public char FirstElement;
 
     public static ref char GetFirstElement(ref CharHeader header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<CharHeader, char> array) => array.Header.Count;
+    public static int GetTailLength(scoped in CharHeader header) => header.Count;
 }
 
 /// <summary>Non-blittable unmanaged element type: managed sizeof(bool) = 1, offset 9, header size 16.</summary>
@@ -107,10 +116,10 @@ public struct BoolHeader : IFlexibleArrayHeader<BoolHeader, bool>
     public bool FirstElement;
 
     public static ref bool GetFirstElement(ref BoolHeader header) => ref header.FirstElement;
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<BoolHeader, bool> array) => array.Header.Count;
+    public static int GetTailLength(scoped in BoolHeader header) => header.Count;
 }
 
-/// <summary>Sentinel-terminated tail: the logical length comes from a bounded walk over the elements.</summary>
+/// <summary>Sentinel-terminated tail: the logical length comes from a walk over the elements.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct SentinelHeader : IFlexibleArrayHeader<SentinelHeader, int>
 {
@@ -119,11 +128,36 @@ public struct SentinelHeader : IFlexibleArrayHeader<SentinelHeader, int>
 
     public static ref int GetFirstElement(ref SentinelHeader header) => ref header.FirstElement;
 
-    public static int GetTailLength(ReadOnlyFlexibleArraySpan<SentinelHeader, int> array)
+    // strlen-style walk: no bound, termination is guaranteed by the producer.
+    public static int GetTailLength(scoped in SentinelHeader header)
     {
-        ReadOnlySpan<int> elements = array.Elements;
+        ref SentinelHeader h = ref Unsafe.AsRef(in header);
+        ref int first = ref SentinelHeader.GetFirstElement(ref h);
         int length = 0;
-        while (length < elements.Length && elements[length] != 0)
+        while (Unsafe.Add(ref first, length) != 0)
+        {
+            length++;
+        }
+
+        return length;
+    }
+}
+
+/// <summary>A minimal byte-tail header: the whole object is a NUL-terminated byte string.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct CStrHeader : IFlexibleArrayHeader<CStrHeader, byte>
+{
+    public byte FirstElement;
+
+    public static ref byte GetFirstElement(ref CStrHeader header) => ref header.FirstElement;
+
+    // strlen over the byte tail; termination is guaranteed by the producer.
+    public static int GetTailLength(scoped in CStrHeader header)
+    {
+        ref CStrHeader h = ref Unsafe.AsRef(in header);
+        ref byte first = ref CStrHeader.GetFirstElement(ref h);
+        int length = 0;
+        while (Unsafe.Add(ref first, length) != 0)
         {
             length++;
         }

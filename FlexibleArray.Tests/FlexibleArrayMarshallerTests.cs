@@ -85,6 +85,59 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             Assert.NotEqual(0, NativeMemCmp.MemCmp(array, right, (nuint)expected.Length));
         }
     }
+
+    [Fact]
+    public void ConvertToManaged_AnchorsViewAtReturnedPointer()
+    {
+        using var array = FlexibleArray<PacketHeader, int>.Create(new PacketHeader { Count = 2 }, [7, 8]);
+
+        ReadOnlyFlexibleArraySpan<PacketHeader, int> view =
+            ReadOnlyFlexibleArraySpanMarshaller<PacketHeader, int>.ConvertToManaged(
+                (PacketHeader*)array.DangerousGetPointer());
+
+        Assert.Equal(2, view.Length);
+        Assert.Equal(new[] { 7, 8 }, view.Elements.ToArray());
+        Assert.Equal(7, view.Header.FirstElement);
+    }
+
+    [Fact]
+    public void ConvertToManaged_NullPointerYieldsDefaultView()
+    {
+        Assert.Equal(0, ReadOnlyFlexibleArraySpanMarshaller<PacketHeader, int>.ConvertToManaged(null).Length);
+    }
+
+    [Fact]
+    public void LibraryImport_DeclarativeReceive_FromReturnedPointer()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Set through libc setenv: the managed environment block is not visible to native getenv.
+        Assert.Equal(0, NativeEnv.SetEnv("FA_RECV_TEST", "hello!", overwrite: 1));
+        try
+        {
+            ReadOnlyFlexibleArraySpan<CStrHeader, byte> value = NativeEnv.GetEnv("FA_RECV_TEST");
+            Assert.Equal(6, value.Length);
+            Assert.Equal("hello!"u8.ToArray(), value.Elements.ToArray());
+        }
+        finally
+        {
+            NativeEnv.UnsetEnv("FA_RECV_TEST");
+        }
+    }
+
+    [Fact]
+    public void LibraryImport_DeclarativeReceive_NullPointerBecomesDefaultView()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        Assert.Equal(0, NativeEnv.GetEnv("FA_MISSING_VARIABLE_9F3A").Length);
+    }
 }
 
 internal static partial class NativeMemCmp
@@ -92,4 +145,18 @@ internal static partial class NativeMemCmp
     // Declaration-only: the type-level default marshaller applies automatically.
     [LibraryImport("libc", EntryPoint = "memcmp")]
     internal static unsafe partial int MemCmp(FlexibleArray<PacketHeader, int> left, void* right, nuint size);
+}
+
+internal static partial class NativeEnv
+{
+    // Declaration-only receive: native char* getenv(const char*) becomes a complete-object
+    // view whose byte tail walks to the terminating NUL.
+    [LibraryImport("libc", EntryPoint = "getenv", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial ReadOnlyFlexibleArraySpan<CStrHeader, byte> GetEnv(string name);
+
+    [LibraryImport("libc", EntryPoint = "setenv", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int SetEnv(string name, string value, int overwrite);
+
+    [LibraryImport("libc", EntryPoint = "unsetenv", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial int UnsetEnv(string name);
 }

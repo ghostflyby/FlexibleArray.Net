@@ -81,8 +81,8 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
         ref T firstElement = ref THeader.GetFirstElement(ref *(THeader*)pointer);
         elements.CopyTo(MemoryMarshal.CreateSpan(ref firstElement, elements.Length));
 
-        FlexibleArraySpan<THeader, T> created = new(ref Unsafe.AsRef<THeader>(pointer), elements.Length);
-        if (THeader.GetTailLength(created) != elements.Length)
+        ref THeader written = ref Unsafe.AsRef<THeader>(pointer);
+        if (THeader.GetTailLength(in written) != elements.Length)
         {
             NativeMemory.AlignedFree(pointer);
             throw new ArgumentException(
