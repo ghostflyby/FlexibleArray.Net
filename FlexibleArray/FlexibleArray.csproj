@@ -15,10 +15,10 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <Authors>ghostflyby</Authors>
-    <Description>TODO</Description>
+    <Description>C flexible array members for .NET: a fixed header with a contiguous trailing element sequence in one allocation, exposed as typed span and memory views with C-ABI-faithful layout measurements, self-describing parsing, and declaration-only pointer marshalling for [LibraryImport] interop.</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>TODO</PackageTags>
+    <PackageTags>interop;pinvoke;native;unmanaged;flexible-array-member;span;memory;native-aot</PackageTags>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ghostflyby/FlexibleArray</RepositoryUrl>
     <PackageProjectUrl>https://github.com/ghostflyby/FlexibleArray</PackageProjectUrl>
