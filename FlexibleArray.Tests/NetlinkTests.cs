@@ -59,19 +59,19 @@ internal struct SockAddrNl
 
 internal static partial class LinuxInterop
 {
-    [LibraryImport("libc", SetLastError = true)]
+    [LibraryImport("libc", EntryPoint = "socket", SetLastError = true)]
     internal static partial int Socket(int domain, int type, int protocol);
 
-    [LibraryImport("libc", SetLastError = true)]
+    [LibraryImport("libc", EntryPoint = "bind", SetLastError = true)]
     internal static unsafe partial int Bind(int fd, SockAddrNl* addr, nuint len);
 
-    [LibraryImport("libc", SetLastError = true)]
+    [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
     internal static unsafe partial long SendTo(int fd, byte* buf, nuint len, int flags, SockAddrNl* dst, nuint dstLen);
 
-    [LibraryImport("libc", SetLastError = true)]
+    [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
     internal static unsafe partial long RecvFrom(int fd, byte* buf, nuint len, int flags, void* src, nuint* srcLen);
 
-    [LibraryImport("libc", SetLastError = true)]
+    [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     internal static partial int Close(int fd);
 }
 
