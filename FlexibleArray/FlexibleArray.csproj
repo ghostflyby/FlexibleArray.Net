@@ -20,8 +20,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>interop;pinvoke;native;unmanaged;flexible-array-member;span;memory;native-aot</PackageTags>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/ghostflyby/FlexibleArray</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/ghostflyby/FlexibleArray</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ghostflyby/FlexibleArray.Net</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ghostflyby/FlexibleArray.Net</PackageProjectUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
 
