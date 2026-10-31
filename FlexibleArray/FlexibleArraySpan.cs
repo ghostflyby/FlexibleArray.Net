@@ -19,6 +19,17 @@ public readonly ref struct FlexibleArraySpan<THeader, T>
     private readonly ref THeader _header;
     private readonly int _length;
 
+    /// <summary>
+    /// Anchors a complete-object view at the header in place. The tail length is derived from
+    /// the header contract and is not validated — the declaration guarantees the object is
+    /// valid at this location, matching P/Invoke trust semantics.
+    /// </summary>
+    public FlexibleArraySpan(ref THeader header)
+    {
+        _header = ref header;
+        _length = THeader.GetTailLength(in header);
+    }
+
     internal FlexibleArraySpan(ref THeader header, int length)
     {
         _header = ref header;

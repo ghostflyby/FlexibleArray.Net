@@ -1,17 +1,30 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace FlexibleArray;
 
 /// <summary>
 /// A read-only, short-lived view of a complete flexible array object.
 /// </summary>
+[NativeMarshalling(typeof(ReadOnlyFlexibleArraySpanMarshaller<,>))]
 public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
     private readonly ref readonly THeader _header;
     private readonly int _length;
+
+    /// <summary>
+    /// Anchors a complete-object view at the header in place. The tail length is derived from
+    /// the header contract and is not validated — the declaration guarantees the object is
+    /// valid at this location, matching P/Invoke trust semantics.
+    /// </summary>
+    public ReadOnlyFlexibleArraySpan(in THeader header)
+    {
+        _header = ref header;
+        _length = THeader.GetTailLength(in header);
+    }
 
     internal ReadOnlyFlexibleArraySpan(ref readonly THeader header, int length)
     {
@@ -58,8 +71,9 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     }
 
     /// <summary>
-    /// Parses a self-describing object from a buffer: builds a capacity-bounded view, asks the
-    /// header contract for the logical tail length, and re-creates the view with that length.
+    /// Parses a self-describing object from a buffer: reads the header, asks the header
+    /// contract for the logical tail length, and clamps it against the buffer's element
+    /// capacity.
     /// </summary>
     /// <returns>
     /// false when the buffer is shorter than the full header, or when the derived tail length
@@ -73,10 +87,11 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
             return false;
         }
 
+        ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref THeader header = ref Unsafe.As<byte, THeader>(ref firstByte);
+        int length = THeader.GetTailLength(in header);
         long capacity = (buffer.Length - FlexibleArrayLayout<THeader, T>.FirstElementOffset)
             / FlexibleArrayLayout<THeader, T>.ElementSize;
-        ReadOnlyFlexibleArraySpan<THeader, T> capacityView = Create(buffer, (int)capacity);
-        int length = THeader.GetTailLength(capacityView);
         if ((uint)length > (uint)capacity)
         {
             return false;

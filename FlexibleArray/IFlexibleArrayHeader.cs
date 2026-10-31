@@ -26,15 +26,15 @@ public interface IFlexibleArrayHeader<TSelf, T>
     static abstract ref T GetFirstElement(ref TSelf header);
 
     /// <summary>
-    /// Returns the logical number of tail elements of the complete object. During parsing the
-    /// given view is capacity-bounded: its <see cref="ReadOnlyFlexibleArraySpan{THeader, T}.Length"/>
-    /// is the element capacity of the backing buffer, not necessarily the logical count.
+    /// Returns the logical number of tail elements of the complete object whose header is given.
     /// </summary>
     /// <remarks>
-    /// Implementations must not mutate the view and must return a value in [0, array.Length].
-    /// This models the real-world forms of self-describing tails: a count field, a byte length
-    /// (minus the header, divided by the element size), an end-pointer difference, or a
-    /// sentinel walk bounded by the view capacity.
+    /// Implementations derive the answer from the header alone: a count field, a byte length
+    /// (minus the header, divided by the element size), an end-pointer difference, or a sentinel
+    /// walk over the tail reached through <see cref="GetFirstElement"/> — in which case
+    /// termination is guaranteed by the producer, like <c>strlen</c>. The header must not be
+    /// mutated, and the library performs no bounds checking on the result: interop declarations
+    /// are trusted, matching P/Invoke semantics.
     /// </remarks>
-    static abstract int GetTailLength(ReadOnlyFlexibleArraySpan<TSelf, T> array);
+    static abstract int GetTailLength(scoped in TSelf header);
 }
