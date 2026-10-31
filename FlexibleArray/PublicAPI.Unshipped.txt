@@ -10,6 +10,10 @@ FlexibleArray.FlexibleArrayMemory<THeader, T>
 FlexibleArray.FlexibleArrayMemory<THeader, T>.FlexibleArrayMemory() -> void
 FlexibleArray.FlexibleArrayMemory<THeader, T>.Length.get -> int
 FlexibleArray.FlexibleArrayMemory<THeader, T>.Span.get -> FlexibleArray.FlexibleArraySpan<THeader, T>
+static FlexibleArray.FlexibleArrayMemory<THeader, T>.Create(System.Memory<byte> buffer, int length) -> FlexibleArray.FlexibleArrayMemory<THeader, T>
+static FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>.Create(System.ReadOnlyMemory<byte> buffer, int length) -> FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>
+static FlexibleArray.FlexibleArrayMemory<THeader, T>.implicit operator FlexibleArray.FlexibleArraySpan<THeader, T>(FlexibleArray.FlexibleArrayMemory<THeader, T> memory) -> FlexibleArray.FlexibleArraySpan<THeader, T>
+static FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>.implicit operator FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>(FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T> memory) -> FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>
 FlexibleArray.FlexibleArraySpan<THeader, T>
 FlexibleArray.FlexibleArraySpan<THeader, T>.Elements.get -> System.Span<T>
 FlexibleArray.FlexibleArraySpan<THeader, T>.FlexibleArraySpan() -> void

@@ -11,7 +11,8 @@ namespace FlexibleArray;
 /// </summary>
 /// <remarks>
 /// Storage is an aligned unmanaged allocation from
-/// <see cref="System.Runtime.InteropServices.NativeMemory"/> and must be released via
+/// <see cref="System.Runtime.InteropServices.NativeMemory"/>, exposed as a
+/// <see cref="Memory{T}"/> through an internal memory manager, and must be released via
 /// <see cref="Dispose"/>. The current prototype registers no finalizer; ownership semantics
 /// remain open.
 /// </remarks>
@@ -20,13 +21,15 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
-    private void* _pointer;
+    private readonly NativeMemoryManager _manager;
+    private readonly Memory<byte> _memory;
     private readonly int _length;
     private readonly int _byteLength;
 
-    private FlexibleArray(void* pointer, int length, int byteLength)
+    private FlexibleArray(NativeMemoryManager manager, int length, int byteLength)
     {
-        _pointer = pointer;
+        _manager = manager;
+        _memory = manager.Memory;
         _length = length;
         _byteLength = byteLength;
     }
@@ -43,13 +46,14 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
     {
         get
         {
-            ObjectDisposedException.ThrowIf(_pointer is null, this);
-            return new FlexibleArraySpan<THeader, T>(ref Unsafe.AsRef<THeader>(_pointer), _length);
+            Span<byte> buffer = _memory.Span;
+            ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
+            return new FlexibleArraySpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), _length);
         }
     }
 
-    /// <summary>Gets a writable view that can be held long-term.</summary>
-    public FlexibleArrayMemory<THeader, T> Memory => new(this);
+    /// <summary>Gets a Memory-backed writable view that can be held long-term.</summary>
+    public FlexibleArrayMemory<THeader, T> Memory => new(_memory, _length);
 
     /// <summary>
     /// Returns a pointer to the start of the contiguous object memory. The pointer borrows the
@@ -57,10 +61,7 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
     /// </summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
     public void* DangerousGetPointer()
-    {
-        ObjectDisposedException.ThrowIf(_pointer is null, this);
-        return _pointer;
-    }
+        => _manager.Pointer;
 
     /// <summary>
     /// Creates a complete object from a header and a tail. The initialization order is fixed:
@@ -76,32 +77,27 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
         int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
         nuint alignment = ComputeAlignment();
         void* pointer = NativeMemory.AlignedAlloc((nuint)byteLength, alignment);
+        NativeMemoryManager manager = new(pointer, byteLength);
 
-        *(THeader*)pointer = header;
-        ref T firstElement = ref THeader.GetFirstElement(ref *(THeader*)pointer);
+        Span<byte> buffer = manager.Memory.Span;
+        ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref THeader written = ref Unsafe.As<byte, THeader>(ref firstByte);
+        written = header;
+        ref T firstElement = ref THeader.GetFirstElement(ref written);
         elements.CopyTo(MemoryMarshal.CreateSpan(ref firstElement, elements.Length));
 
-        ref THeader written = ref Unsafe.AsRef<THeader>(pointer);
         if (THeader.GetTailLength(in written) != elements.Length)
         {
-            NativeMemory.AlignedFree(pointer);
+            manager.Dispose();
             throw new ArgumentException(
                 $"The header-declared tail length does not match the {elements.Length} elements provided.");
         }
 
-        return new FlexibleArray<THeader, T>(pointer, elements.Length, byteLength);
+        return new FlexibleArray<THeader, T>(manager, elements.Length, byteLength);
     }
 
     /// <inheritdoc />
-    public void Dispose()
-    {
-        void* pointer = _pointer;
-        if (pointer is not null)
-        {
-            _pointer = null;
-            NativeMemory.AlignedFree(pointer);
-        }
-    }
+    public void Dispose() => _manager.Dispose();
 
     // Alignment requirements cannot be queried at runtime; allocate conservatively at the
     // smallest power of two not less than max(sizeof(THeader), sizeof(T)), with a floor of 8.
