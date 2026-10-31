@@ -58,7 +58,7 @@ public sealed class LayoutOffsetTests
         Assert.Equal(8, FlexibleArrayLayout<CharHeader, char>.HeaderSize);
         Assert.Equal(2, FlexibleArrayLayout<CharHeader, char>.ElementSize);
 
-        Assert.Equal(8, FlexibleArrayLayout<BoolHeader, bool>.FirstElementOffset);
+        Assert.Equal(9, FlexibleArrayLayout<BoolHeader, bool>.FirstElementOffset);
         Assert.Equal(16, FlexibleArrayLayout<BoolHeader, bool>.HeaderSize);
         Assert.Equal(1, FlexibleArrayLayout<BoolHeader, bool>.ElementSize);
     }

@@ -56,4 +56,33 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
         ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
         return new ReadOnlyFlexibleArraySpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
     }
+
+    /// <summary>
+    /// Parses a self-describing object from a buffer: builds a capacity-bounded view, asks the
+    /// header contract for the logical tail length, and re-creates the view with that length.
+    /// </summary>
+    /// <returns>
+    /// false when the buffer is shorter than the full header, or when the derived tail length
+    /// is negative or exceeds the buffer's element capacity.
+    /// </returns>
+    public static bool TryParse(ReadOnlySpan<byte> buffer, out ReadOnlyFlexibleArraySpan<THeader, T> view)
+    {
+        view = default;
+        if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
+        {
+            return false;
+        }
+
+        long capacity = (buffer.Length - FlexibleArrayLayout<THeader, T>.FirstElementOffset)
+            / FlexibleArrayLayout<THeader, T>.ElementSize;
+        ReadOnlyFlexibleArraySpan<THeader, T> capacityView = Create(buffer, (int)capacity);
+        int length = THeader.GetTailLength(capacityView);
+        if ((uint)length > (uint)capacity)
+        {
+            return false;
+        }
+
+        view = Create(buffer, length);
+        return true;
+    }
 }

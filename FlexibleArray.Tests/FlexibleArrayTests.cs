@@ -53,7 +53,7 @@ public sealed class FlexibleArrayTests
         Assert.Equal(new[] { 'a', 'b', 'c' }, chars.Span.Elements.ToArray());
         Assert.Equal('a', chars.Span.Header.FirstElement);
 
-        using var bools = FlexibleArray<BoolHeader, bool>.Create(new BoolHeader { Id = 7 }, [true, false, true]);
+        using var bools = FlexibleArray<BoolHeader, bool>.Create(new BoolHeader { Id = 7, Count = 3 }, [true, false, true]);
         Assert.Equal(new[] { true, false, true }, bools.Span.Elements.ToArray());
         Assert.Equal(7, bools.Span.Header.Id);
     }
@@ -67,6 +67,12 @@ public sealed class FlexibleArrayTests
         Assert.Equal(1000, array.Length);
         Assert.Equal(16 + 4000, array.ByteLength);
         Assert.Equal(source, array.Span.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Create_RejectsHeaderCountMismatch()
+    {
+        Assert.Throws<ArgumentException>(() => FlexibleArray<PacketHeader, int>.Create(new PacketHeader { Count = 5 }, [1, 2]));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace FlexibleArray;
 
@@ -14,6 +15,7 @@ namespace FlexibleArray;
 /// <see cref="Dispose"/>. The current prototype registers no finalizer; ownership semantics
 /// remain open.
 /// </remarks>
+[NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
 public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
@@ -50,10 +52,25 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
     public FlexibleArrayMemory<THeader, T> Memory => new(this);
 
     /// <summary>
+    /// Returns a pointer to the start of the contiguous object memory. The pointer borrows the
+    /// native allocation and becomes invalid once the owner is disposed.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public void* DangerousGetPointer()
+    {
+        ObjectDisposedException.ThrowIf(_pointer is null, this);
+        return _pointer;
+    }
+
+    /// <summary>
     /// Creates a complete object from a header and a tail. The initialization order is fixed:
     /// the header (including the placeholder field) is written first, then the tail elements
-    /// are copied, so the header write never overwrites elements already in place.
+    /// are copied, so the header write never overwrites elements already in place. Afterwards
+    /// the header-declared tail length is validated to match the number of elements provided.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// The header-declared tail length does not match the number of elements.
+    /// </exception>
     public static FlexibleArray<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
     {
         int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
@@ -63,6 +80,14 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
         *(THeader*)pointer = header;
         ref T firstElement = ref THeader.GetFirstElement(ref *(THeader*)pointer);
         elements.CopyTo(MemoryMarshal.CreateSpan(ref firstElement, elements.Length));
+
+        FlexibleArraySpan<THeader, T> created = new(ref Unsafe.AsRef<THeader>(pointer), elements.Length);
+        if (THeader.GetTailLength(created) != elements.Length)
+        {
+            NativeMemory.AlignedFree(pointer);
+            throw new ArgumentException(
+                $"The header-declared tail length does not match the {elements.Length} elements provided.");
+        }
 
         return new FlexibleArray<THeader, T>(pointer, elements.Length, byteLength);
     }
