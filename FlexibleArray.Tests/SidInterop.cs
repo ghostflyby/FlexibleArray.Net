@@ -66,6 +66,23 @@ internal static partial class Advapi32
 
     [LibraryImport("advapi32", EntryPoint = "GetSidLengthSid")]
     internal static unsafe partial uint GetSidLengthSid(void* sid);
+
+    // Experiment: AllocateAndInitializeSid hands the PSID through an out parameter (the
+    // return value is BOOL). If the generator supports custom marshallers on out-parameter
+    // positions, the whole flow becomes declarative.
+    [LibraryImport("advapi32", EntryPoint = "AllocateAndInitializeSid")]
+    internal static unsafe partial int AllocateAndInitializeSidDeclarative(
+        byte* authority,
+        byte subAuthorityCount,
+        uint subAuthority0,
+        uint subAuthority1,
+        uint subAuthority2,
+        uint subAuthority3,
+        uint subAuthority4,
+        uint subAuthority5,
+        uint subAuthority6,
+        uint subAuthority7,
+        out FlexibleArray<SidHeader, uint> sid);
 }
 
 /// <summary>
@@ -98,6 +115,31 @@ public sealed unsafe class SidInteropTests
             Assert.Equal(8 + 2 * sizeof(uint), (int)Advapi32.GetSidLengthSid(sid));
             Assert.Equal(11u, array.Span.Elements[0]);
             Assert.Equal(22u, array.Span.Elements[1]);
+        }
+    }
+
+    [Fact]
+    public void DeclarativeOutReceive_AdoptsAndFreesThroughHeader()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        fixed (byte* authority = Sid.NtAuthority)
+        {
+            // Fully declarative: the PSID arrives through an out parameter and the
+            // constrained marshaller adopts it; disposal frees through FreeSid.
+            Assert.NotEqual(0, Advapi32.AllocateAndInitializeSidDeclarative(
+                authority, 3, 1, 2, 3, 0, 0, 0, 0, 0, out FlexibleArray<SidHeader, uint>? sid));
+            using (sid)
+            {
+                Assert.NotNull(sid);
+                Assert.Equal(3, sid!.Length);
+                Assert.Equal(new uint[] { 1, 2, 3 }, sid.Span.Elements.ToArray());
+            }
+
+            Assert.Throws<ObjectDisposedException>(() => { _ = sid!.Span; });
         }
     }
 

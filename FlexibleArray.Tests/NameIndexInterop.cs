@@ -17,8 +17,10 @@ internal static unsafe partial class PosixNative
     [LibraryImport("libc", EntryPoint = "if_freenameindex")]
     internal static partial void IfFreeNameIndex(IfNameIndexRecord* records);
 
+    // Declaration-only fill-and-receive: getcwd writes into the caller's storage and returns
+    // the buffer pointer, which becomes the borrowed byte-tail view automatically.
     [LibraryImport("libc", EntryPoint = "getcwd")]
-    internal static partial byte* GetCwd(byte* buffer, nuint size);
+    internal static partial ReadOnlyFlexibleArraySpan<CStrHeader, byte> GetCwd(byte* buffer, nuint size);
 }
 
 /// <summary>
@@ -56,7 +58,7 @@ public sealed unsafe class NameIndexInteropTests
     }
 
     [Fact]
-    public void GetCwd_FillsCallerProvidedStorage()
+    public void GetCwd_DeclarativeFillAndReceiveOverCallerStorage()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
@@ -66,12 +68,10 @@ public sealed unsafe class NameIndexInteropTests
         Span<byte> buffer = stackalloc byte[1024];
         fixed (byte* pointer = buffer)
         {
-            byte* result = PosixNative.GetCwd(pointer, (nuint)buffer.Length);
-            Assert.True(result == pointer);
-
-            // Fill semantics: the caller owns the storage; the anchoring constructor
-            // derives the byte-tail length (strlen) from the filled content itself.
-            ReadOnlyFlexibleArraySpan<CStrHeader, byte> view = new(*(CStrHeader*)pointer);
+            // Fill + declaration-only borrow receive in one signature: the returned buffer
+            // pointer anchors a view whose strlen tail is derived from the filled content.
+            ReadOnlyFlexibleArraySpan<CStrHeader, byte> view = PosixNative.GetCwd(pointer, (nuint)buffer.Length);
+            Assert.True(view.Length > 0);
             string current = System.Text.Encoding.ASCII.GetString(view.Elements);
             Assert.Equal(Directory.GetCurrentDirectory(), current);
         }
