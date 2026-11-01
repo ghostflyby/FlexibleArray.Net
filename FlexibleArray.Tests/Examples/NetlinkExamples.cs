@@ -43,7 +43,7 @@ internal static partial class NetlinkSocket
     internal static partial int Bind(int fd, in SockAddrNl addr, uint len);
 
     [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
-    internal static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst);
+    internal static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst, uint dstLen);
 
     [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
     internal static partial long RecvFrom(int fd, Span<byte> buf, int flags);
@@ -282,7 +282,7 @@ public sealed class NetlinkExamples
             Span<byte> request = new byte[32];
             DeclarativeNetlink.BuildDumpRequest(request);
             SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
-            long sent = NetlinkSocket.SendTo(fd, request, 0, kernel);
+            long sent = NetlinkSocket.SendTo(fd, request, 0, kernel, (uint)Marshal.SizeOf<SockAddrNl>());
             Assert.True(sent == request.Length, $"sendto() failed with errno {Marshal.GetLastWin32Error()}");
 
             Span<byte> response = new byte[65536];
