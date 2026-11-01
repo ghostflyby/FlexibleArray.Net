@@ -7,7 +7,7 @@ namespace FlexibleArray;
 /// <summary>
 /// A read-only, short-lived view of a complete flexible array object.
 /// </summary>
-[NativeMarshalling(typeof(ReadOnlyFlexibleArraySpanMarshaller<,>))]
+[NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
 public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
