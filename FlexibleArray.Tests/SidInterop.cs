@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -93,7 +94,7 @@ internal static partial class Advapi32
 public sealed unsafe class SidInteropTests
 {
     [Fact]
-    public void Layout_MatchesTheOsViewOfSid()
+    public void DeclarativeReceive_LayoutMatchesTheOsViewOfSid()
     {
         Assert.Equal(Sid.SubAuthorityOffset, (int)FlexibleArrayLayout<SidHeader, uint>.FirstElementOffset);
         Assert.Equal(12, FlexibleArrayLayout<SidHeader, uint>.GetRequiredBytes(1));
@@ -105,16 +106,45 @@ public sealed unsafe class SidInteropTests
 
         fixed (byte* authority = Sid.NtAuthority)
         {
-            Assert.NotEqual(0, Advapi32.AllocateAndInitializeSid(
-                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out byte* sid));
-            using FlexibleArray<SidHeader, uint> array = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)sid);
+            // Declarative path under test; the raw-pointer accessors below are the OS truth
+            // the layout is checked against, not an alternate way to obtain the object.
+            Assert.NotEqual(0, Advapi32.AllocateAndInitializeSidDeclarative(
+                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out FlexibleArray<SidHeader, uint>? adopted));
+            using (adopted)
+            {
+                Assert.NotNull(adopted);
+                using MemoryHandle pinned = adopted!.Pin();
+                byte* sid = (byte*)pinned.Pointer;
 
-            // The OS agrees with our geometry: its tail pointer equals header + our offset.
-            Assert.Equal((nint)Advapi32.GetSidSubAuthority(sid, 0), (nint)(sid + Sid.SubAuthorityOffset));
-            Assert.Equal(2, array.Length);
-            Assert.Equal(8 + 2 * sizeof(uint), (int)Advapi32.GetSidLengthSid(sid));
-            Assert.Equal(11u, array.Span.Elements[0]);
-            Assert.Equal(22u, array.Span.Elements[1]);
+                // The OS agrees with our geometry: its tail pointer equals header + our
+                // offset, the count field drives the length, and the total size matches.
+                Assert.Equal((nint)Advapi32.GetSidSubAuthority(sid, 0), (nint)(sid + Sid.SubAuthorityOffset));
+                Assert.Equal(2, adopted.Length);
+                Assert.Equal(8 + 2 * sizeof(uint), (int)Advapi32.GetSidLengthSid(sid));
+                Assert.Equal(11u, adopted.Span.Elements[0]);
+                Assert.Equal(22u, adopted.Span.Elements[1]);
+            }
+        }
+    }
+
+    [Fact]
+    public void Adopt_ManualEntryPoint_AcceptsRawPointersAndReleases()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // Adopt is a public API of its own: pointers that arrive outside a LibraryImport
+        // signature (legacy DllImport bindings, out byte* shapes) still adopt and release.
+        fixed (byte* authority = Sid.NtAuthority)
+        {
+            Assert.NotEqual(0, Advapi32.AllocateAndInitializeSid(
+                authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out byte* sid));
+
+            using FlexibleArray<SidHeader, uint> array = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)sid);
+            Assert.Equal(1, array.Length);
+            Assert.Equal(7u, array.Span.Elements[0]);
         }
     }
 

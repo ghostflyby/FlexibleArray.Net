@@ -8,7 +8,24 @@ internal static partial class NativeStdLib
     internal static unsafe partial byte* StrDup(string source);
 
     [LibraryImport("libc", EntryPoint = "free")]
-    internal static unsafe partial void Free(void* pointer);
+    private static unsafe partial void FreePosix(void* pointer);
+
+    [LibraryImport("ucrtbase", EntryPoint = "free")]
+    private static unsafe partial void FreeWindows(void* pointer);
+
+    // The CRT allocator pairs with the CRT the memory came from: libc on POSIX,
+    // ucrtbase on Windows.
+    internal static unsafe void Free(void* pointer)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            FreeWindows(pointer);
+        }
+        else
+        {
+            FreePosix(pointer);
+        }
+    }
 }
 
 /// <summary>
@@ -19,13 +36,15 @@ internal static partial class NativeStdLib
 public sealed unsafe class FlexibleArrayTransferTests
 {
     [Fact]
-    public void Adopt_HoldsTransferredObjectAndReleasesThroughHeaderPolicy()
+    public void Adopt_ManualEntryPoint_AcceptsRawPointersAndReleases()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
             return;
         }
 
+        // Adopt as a public API on its own: a raw pointer from a legacy binding adopts and
+        // releases through the header policy; the declarative path is covered separately.
         byte* pointer = NativeStdLib.StrDup("hello!");
         Assert.True(pointer != null);
 
@@ -41,13 +60,14 @@ public sealed unsafe class FlexibleArrayTransferTests
     }
 
     [Fact]
-    public void AdoptReadOnly_HoldsTransferredObjectReadonly()
+    public void AdoptReadOnly_ManualEntryPoint_AcceptsRawPointers()
     {
         if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
             return;
         }
 
+        // Read-only manual entry point; the declarative paths are covered separately.
         byte* pointer = NativeStdLib.StrDup("readonly!");
         Assert.True(pointer != null);
 
