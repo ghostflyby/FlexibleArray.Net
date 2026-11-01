@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-24.04, windows-2025, macos-26 ]
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, ubuntu-22.04, windows-2025, macos-26 ]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -47,3 +47,19 @@ jobs:
 
       - name: Test
         run: dotnet test FlexibleArray.slnx --no-build --configuration Release
+
+  # libc diversity: the same source-generated interop against musl instead of glibc.
+  build-test-musl:
+    name: Build & Test (alpine musl)
+    runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Test
+        run: |
+          ICU_DIR=/usr/lib dotnet test FlexibleArray.slnx --configuration Release
+        env:
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 'true'
