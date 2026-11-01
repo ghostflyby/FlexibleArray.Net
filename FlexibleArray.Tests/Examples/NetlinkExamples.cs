@@ -80,10 +80,12 @@ internal static partial class DeclarativeNetlink
     private static partial int Bind(int fd, in SockAddrNl addr, uint len);
 
     [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
-    private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst, uint dstLen);
+    // The length parameter stays explicit: spans cross as pointers only, so the native
+    // (fd, buf, len, flags, dst, addrlen) positions must each have a managed argument.
+    private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, nuint len, int flags, in SockAddrNl dst, uint dstLen);
 
     [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
-    private static partial long RecvFrom(int fd, Span<byte> buf, int flags);
+    private static partial long RecvFrom(int fd, Span<byte> buf, nuint len, int flags);
 
     [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     private static partial int Close(int fd);
@@ -120,7 +122,7 @@ internal static partial class DeclarativeNetlink
             Span<byte> request = new byte[32];
             BuildDumpRequest(request);
             SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
-            long sent = SendTo(fd, request, 0, kernel, Netlink.ADDR_LEN);
+            long sent = SendTo(fd, request, (nuint)request.Length, 0, kernel, Netlink.ADDR_LEN);
             if (sent != request.Length)
             {
                 throw new InvalidOperationException($"sendto() failed with errno {Marshal.GetLastWin32Error()}");
@@ -131,7 +133,7 @@ internal static partial class DeclarativeNetlink
             bool finished = false;
             for (int round = 0; round < 16 && !finished; round++)
             {
-                long received = RecvFrom(fd, response, 0);
+                long received = RecvFrom(fd, response, (nuint)response.Length, 0);
                 if (received <= 0)
                 {
                     throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
@@ -232,10 +234,12 @@ internal static partial class RawNetlinkPInvoke
     private static partial int Bind(int fd, in SockAddrNl addr, uint len);
 
     [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
-    private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst, uint dstLen);
+    // The length parameter stays explicit: spans cross as pointers only, so the native
+    // (fd, buf, len, flags, dst, addrlen) positions must each have a managed argument.
+    private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, nuint len, int flags, in SockAddrNl dst, uint dstLen);
 
     [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
-    private static partial long RecvFrom(int fd, Span<byte> buf, int flags);
+    private static partial long RecvFrom(int fd, Span<byte> buf, nuint len, int flags);
 
     [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     private static partial int Close(int fd);
@@ -268,7 +272,7 @@ internal static partial class RawNetlinkPInvoke
             Span<byte> request = new byte[32];
             BuildDumpRequest(request);
             SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
-            long sent = SendTo(fd, request, 0, kernel, Netlink.ADDR_LEN);
+            long sent = SendTo(fd, request, (nuint)request.Length, 0, kernel, Netlink.ADDR_LEN);
             if (sent != request.Length)
             {
                 throw new InvalidOperationException($"sendto() failed with errno {Marshal.GetLastWin32Error()}");
@@ -279,7 +283,7 @@ internal static partial class RawNetlinkPInvoke
             bool finished = false;
             for (int round = 0; round < 16 && !finished; round++)
             {
-                long received = RecvFrom(fd, response, 0);
+                long received = RecvFrom(fd, response, (nuint)response.Length, 0);
                 if (received <= 0)
                 {
                     throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
