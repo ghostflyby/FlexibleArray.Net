@@ -57,8 +57,10 @@ public sealed class MutableFlexibleArrayTests
     {
         Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(
             static _ => Memory<byte>.Empty, new PacketHeader { Count = 1 }, [1]));
-        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(
-            new PacketHeader { Count = 5 }, [1, 2]));
+        // Declared-length rejection belongs to headers without a registered write-back:
+        // a constructible header's count is stamped from the elements instead.
+        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<DoubleTagOriginal, int>.Create(
+            new DoubleTagOriginal(), [1]));
         Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(new byte[8], 1));
     }
 
@@ -105,10 +107,7 @@ public sealed class MutableFlexibleArrayTests
     public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
-        view.Header = new PacketHeader { Count = 2 };
-        view.Elements[0] = 4;
-        view.Elements[1] = 5;
+        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [4, 5]);
 
         using var memory =
             FlexibleArray<PacketHeader, int>.Create(buffer, 2);
@@ -145,6 +144,20 @@ public sealed class MutableFlexibleArrayTests
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Span; });
         array.Dispose();
+    }
+
+    [Fact]
+    public void Create_StampsCountAcrossAllStoragePaths()
+    {
+        // Every storage path derives the tail length from the element count when the header
+        // registers a write-back: no Count on any call site.
+        using var managed = MutableFlexibleArray<PacketHeader, int>.Create(
+            new PacketHeader { Timestamp = 1 }, [1, 2]);
+        using var pooled = MemoryPool<byte>.Shared.Create(
+            new PacketHeader { Timestamp = 2 }, [3]);
+
+        Assert.Equal(2, managed.Header.Count);
+        Assert.Equal(1, pooled.Header.Count);
     }
 
     [Fact]

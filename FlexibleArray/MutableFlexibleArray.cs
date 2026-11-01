@@ -31,10 +31,16 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : FlexibleArray<THea
     /// <summary>
     /// Builds a complete object with managed backing: the array is allocated on the pinned
     /// object heap with extra bytes, and the object starts at the required alignment no matter
-    /// where the runtime places the allocation.
+    /// where the runtime places the allocation. The tail length is derived from the element
+    /// count — stamped when the header registers a write-back, validated against the declared
+    /// field otherwise.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// The header-declared tail length does not match the number of elements.
+    /// A header without a registered write-back declares a tail length that does not match the
+    /// number of elements.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The header's <c>WithTailElementCount</c> and <c>GetTailElementCount</c> disagree.
     /// </exception>
     /// <exception cref="OverflowException">The aligned backing exceeds <see cref="int"/> bytes.</exception>
     public static MutableFlexibleArray<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
@@ -60,12 +66,17 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : FlexibleArray<THea
     /// <summary>
     /// Builds a complete object in storage obtained from an allocator. Storage lifetime
     /// belongs to the allocator; the view keeps whatever it returned reachable. Alignment is
-    /// the allocator's responsibility.
+    /// the allocator's responsibility. The tail length is derived from the element count —
+    /// stamped when the header registers a write-back, validated against the declared field
+    /// otherwise.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// The allocator returned less storage than required, or the header-declared tail length
-    /// does not match the number of elements.
+    /// The allocator returned less storage than required, or a header without a registered
+    /// write-back declares a tail length that does not match the number of elements.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The header's <c>WithTailElementCount</c> and <c>GetTailElementCount</c> disagree.
     /// </exception>
     public static MutableFlexibleArray<THeader, T> Create(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
     {
@@ -82,11 +93,16 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : FlexibleArray<THea
 
     /// <summary>
     /// Builds a complete object over an existing buffer: header first, then the tail, then the
-    /// declared-length consistency check. Alignment is the buffer's responsibility.
+    /// count verification. The tail length is derived from the element count — stamped when
+    /// the header registers a write-back, validated against the declared field otherwise.
+    /// Alignment is the buffer's responsibility.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// The buffer is too short, or the header-declared tail length does not match the number of
-    /// elements.
+    /// The buffer is too short, or a header without a registered write-back declares a tail
+    /// length that does not match the number of elements.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The header's <c>WithTailElementCount</c> and <c>GetTailElementCount</c> disagree.
     /// </exception>
     public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
         => Build(buffer, header, elements);
@@ -137,19 +153,11 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : FlexibleArray<THea
         }
     }
 
-    // Builds the complete object at the start of an already-validated buffer: header first,
-    // then the tail, then the declared-length consistency check.
+    // Builds the complete object at the start of an already-validated buffer through the
+    // span constructor: it owns the stamp-or-validate rule and the count verification.
     private static MutableFlexibleArray<THeader, T> Build(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
     {
-        var view = MutableFlexibleSpan<THeader, T>.Create(buffer.Span, elements.Length);
-        view.Header = header;
-        elements.CopyTo(view.Elements);
-        if (THeader.GetTailElementCount(view.Header) != elements.Length)
-        {
-            throw new ArgumentException(
-                $"The header-declared tail length does not match the {elements.Length} elements provided.");
-        }
-
+        _ = MutableFlexibleSpan<THeader, T>.Create(buffer.Span, header, elements);
         return new MutableFlexibleArray<THeader, T>(buffer, elements.Length, owner: null);
     }
 }

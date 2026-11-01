@@ -105,10 +105,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
 
         // Rebuild the exact object bytes: header write first, then the tail.
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var expectedView = MutableFlexibleSpan<PacketHeader, int>.Create(expected, 2);
-        expectedView.Header = new PacketHeader { Count = 2, Timestamp = 12345 };
-        expectedView.Elements[0] = 10;
-        expectedView.Elements[1] = 20;
+        MutableFlexibleSpan<PacketHeader, int>.Create(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
 
         fixed (byte* right = expected)
         {
@@ -123,10 +120,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void ConvertToManaged_AnchorsViewAtReturnedPointer()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
-        view.Header = new PacketHeader { Count = 2 };
-        view.Elements[0] = 7;
-        view.Elements[1] = 8;
+        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [7, 8]);
 
         fixed (byte* pointer = buffer)
         {
@@ -145,9 +139,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         // A received object already carries its header; the anchoring constructor snapshots
         // the tail length from it.
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var source = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
-        source.Header = new PacketHeader { Count = 2 };
-        source.Elements[0] = 5;
+        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [5, 0]);
 
         fixed (byte* pointer = buffer)
         {
@@ -201,10 +193,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         }
 
         Span<byte> buffer = stackalloc byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
-        view.Header = new PacketHeader { Count = 2 };
-        view.Elements[0] = 10;
-        view.Elements[1] = 20;
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [10, 20]);
 
         Span<byte> expected = new byte[buffer.Length];
         buffer.CopyTo(expected);
@@ -227,10 +216,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         FlexibleSpan<PacketHeader, int> view = array.Span;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var expectedView = MutableFlexibleSpan<PacketHeader, int>.Create(expected, 2);
-        expectedView.Header = new PacketHeader { Count = 2, Timestamp = 77 };
-        expectedView.Elements[0] = 30;
-        expectedView.Elements[1] = 40;
+        MutableFlexibleSpan<PacketHeader, int>.Create(expected, new PacketHeader { Timestamp = 77 }, [30, 40]);
 
         fixed (byte* right = expected)
         {
@@ -272,10 +258,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         FlexibleArray<PacketHeader, int> readOnly = array;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var expectedView = MutableFlexibleSpan<PacketHeader, int>.Create(expected, 2);
-        expectedView.Header = new PacketHeader { Count = 2, Timestamp = 12345 };
-        expectedView.Elements[0] = 10;
-        expectedView.Elements[1] = 20;
+        MutableFlexibleSpan<PacketHeader, int>.Create(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
 
         fixed (byte* right = expected)
         {

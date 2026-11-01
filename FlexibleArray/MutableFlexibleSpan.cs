@@ -66,6 +66,44 @@ public readonly ref struct MutableFlexibleSpan<THeader, T>
         return new MutableFlexibleSpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
     }
 
+    /// <summary>
+    /// Builds a complete object at the start of the buffer: writes the header and copies the
+    /// elements after it, deriving the tail length from the element count. When the header
+    /// registers a write-back (<see cref="IConstructibleFlexibleArrayHeader{TSelf, T}"/>), the
+    /// count is stamped into the length field, overwriting whatever the passed-in header
+    /// carried; otherwise the header's own length field must already declare the element
+    /// count.
+    /// </summary>
+    /// <remarks>
+    /// The derived or declared count is verified against
+    /// <see cref="IFlexibleArrayHeader{TSelf, T}.GetTailElementCount"/> after the copy, so an
+    /// asymmetric write-back or a stale declared length fails here instead of producing a
+    /// corrupt object. Alignment is the buffer's responsibility. This is the raw form's
+    /// companion for content that is fully known up front; progressive assembly keeps the
+    /// <c>(buffer, length)</c> overload.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The buffer is too short, or a header without a registered write-back declares a tail
+    /// length that differs from the number of elements.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The header's <c>WithTailElementCount</c> and <c>GetTailElementCount</c> disagree.
+    /// </exception>
+    /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
+    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+    {
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        if (buffer.Length < requiredBytes)
+        {
+            throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
+        }
+
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref var destination = ref Unsafe.As<byte, THeader>(ref firstByte);
+        FlexibleArrayConstruction.WriteObject(ref destination, header, elements);
+        return new MutableFlexibleSpan<THeader, T>(ref destination, elements.Length);
+    }
+
     /// <summary>Converts to a read-only view whose read-onlyness covers both the header and the tail.</summary>
     public static implicit operator FlexibleSpan<THeader, T>(MutableFlexibleSpan<THeader, T> span)
         => new(ref span._header, span._length);
