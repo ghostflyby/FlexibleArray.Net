@@ -132,9 +132,9 @@ public struct SentinelHeader : IFlexibleArrayHeader<SentinelHeader, int>
     // strlen-style walk: no bound, termination is guaranteed by the producer.
     public static int GetTailLength(scoped in SentinelHeader header)
     {
-        ref SentinelHeader h = ref Unsafe.AsRef(in header);
-        ref int first = ref SentinelHeader.GetFirstElement(ref h);
-        int length = 0;
+        ref var h = ref Unsafe.AsRef(in header);
+        ref var first = ref SentinelHeader.GetFirstElement(ref h);
+        var length = 0;
         while (Unsafe.Add(ref first, length) != 0)
         {
             length++;
@@ -167,9 +167,9 @@ public struct CStrHeader : IFlexibleArrayHeader<CStrHeader, byte>
     // strlen over the byte tail; termination is guaranteed by the producer.
     public static int GetTailLength(scoped in CStrHeader header)
     {
-        ref CStrHeader h = ref Unsafe.AsRef(in header);
-        ref byte first = ref CStrHeader.GetFirstElement(ref h);
-        int length = 0;
+        ref var h = ref Unsafe.AsRef(in header);
+        ref var first = ref CStrHeader.GetFirstElement(ref h);
+        var length = 0;
         while (Unsafe.Add(ref first, length) != 0)
         {
             length++;

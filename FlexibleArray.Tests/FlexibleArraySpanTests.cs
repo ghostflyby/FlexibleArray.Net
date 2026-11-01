@@ -7,7 +7,7 @@ public sealed class FlexibleArraySpanTests
     public void Elements_AliasHeaderPlaceholderField()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
 
         // The interface-returned field reference and the first element are the same memory: aliasing in both directions.
         view.Elements[0] = 42;
@@ -23,7 +23,7 @@ public sealed class FlexibleArraySpanTests
     public void ReadOnlyView_ExposesSameData()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
         view.Header = new PacketHeader { Count = 3, Timestamp = 12345, FirstElement = 1 };
         view.Elements[1] = 2;
         view.Elements[2] = 3;
@@ -40,7 +40,7 @@ public sealed class FlexibleArraySpanTests
     public void ZeroLength_KeepsFullHeaderAndEmptyElements()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(0)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 0);
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 0);
 
         view.Header = new PacketHeader { Count = 0, Timestamp = 12345, FirstElement = -1 };
         Assert.Equal(0, view.Length);
@@ -56,7 +56,7 @@ public sealed class FlexibleArraySpanTests
         // PacketHeader: sizeof(THeader)=24, offset=16, element size=4. The header covers
         // [0,24), overlapping e0 ([16,20)) and e1 ([20,24)).
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
         view.Elements[0] = 10;
         view.Elements[1] = 20;
 

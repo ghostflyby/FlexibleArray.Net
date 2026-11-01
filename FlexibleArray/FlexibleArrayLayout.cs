@@ -42,8 +42,8 @@ public static class FlexibleArrayLayout<THeader, T>
         ElementSize = Unsafe.SizeOf<T>();
 
         THeader temp = default;
-        ref byte origin = ref Unsafe.As<THeader, byte>(ref temp);
-        ref byte firstElement = ref Unsafe.As<T, byte>(ref THeader.GetFirstElement(ref temp));
+        ref var origin = ref Unsafe.As<THeader, byte>(ref temp);
+        ref var firstElement = ref Unsafe.As<T, byte>(ref THeader.GetFirstElement(ref temp));
         FirstElementOffset = Unsafe.ByteOffset(ref origin, ref firstElement);
 
         // Only range validation is possible for the contract: the offset must fall inside the
@@ -74,8 +74,8 @@ public static class FlexibleArrayLayout<THeader, T>
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         checked
         {
-            long tailBytes = FirstElementOffset + (long)length * ElementSize;
-            long requiredBytes = Math.Max(HeaderSize, tailBytes);
+            var tailBytes = FirstElementOffset + (long)length * ElementSize;
+            var requiredBytes = Math.Max(HeaderSize, tailBytes);
             if (requiredBytes > int.MaxValue)
             {
                 throw new OverflowException($"The flexible array requires {requiredBytes} bytes, which exceeds int.MaxValue.");

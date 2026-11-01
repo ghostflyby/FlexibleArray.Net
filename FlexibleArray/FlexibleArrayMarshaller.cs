@@ -41,7 +41,7 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
     /// </exception>
     public static THeader* ConvertToUnmanaged(FlexibleArraySpan<THeader, T> span)
     {
-        ref THeader header = ref span.Header;
+        ref var header = ref span.Header;
         if (Unsafe.IsNullRef(in header))
         {
             throw new InvalidOperationException("A default-constructed FlexibleArraySpan has no backing storage.");
@@ -56,13 +56,13 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
     /// </exception>
     public static THeader* ConvertToUnmanaged(ReadOnlyFlexibleArraySpan<THeader, T> span)
     {
-        ref readonly THeader reference = ref span.Header;
+        ref readonly var reference = ref span.Header;
         if (Unsafe.IsNullRef(in reference))
         {
             throw new InvalidOperationException("A default-constructed ReadOnlyFlexibleArraySpan has no backing storage.");
         }
 
-        ref THeader header = ref Unsafe.AsRef(in reference);
+        ref var header = ref Unsafe.AsRef(in reference);
         return (THeader*)Unsafe.AsPointer(ref header);
     }
 

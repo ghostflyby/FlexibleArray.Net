@@ -1,8 +1,6 @@
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using FlexibleArray;
 
 namespace FlexibleArray.Tests.Examples;
 
@@ -19,8 +17,8 @@ public struct ExampleCStrHeader : IFlexibleArrayHeader<ExampleCStrHeader, byte>
     // strlen; termination is guaranteed by the producer — the standard trust model.
     public static int GetTailLength(scoped in ExampleCStrHeader header)
     {
-        ref ExampleCStrHeader h = ref Unsafe.AsRef(in header);
-        ReadOnlySpan<byte> tail = MemoryMarshal.CreateReadOnlySpan(ref GetFirstElement(ref h), int.MaxValue);
+        ref var h = ref Unsafe.AsRef(in header);
+        var tail = MemoryMarshal.CreateReadOnlySpan(ref GetFirstElement(ref h), int.MaxValue);
         return tail.IndexOf((byte)0);
     }
 }
@@ -36,8 +34,8 @@ public struct ExampleMallocCStringHeader
 
     public static int GetTailLength(scoped in ExampleMallocCStringHeader header)
     {
-        ref ExampleMallocCStringHeader h = ref Unsafe.AsRef(in header);
-        ReadOnlySpan<byte> tail = MemoryMarshal.CreateReadOnlySpan(ref GetFirstElement(ref h), int.MaxValue);
+        ref var h = ref Unsafe.AsRef(in header);
+        var tail = MemoryMarshal.CreateReadOnlySpan(ref GetFirstElement(ref h), int.MaxValue);
         return tail.IndexOf((byte)0);
     }
 
@@ -45,8 +43,8 @@ public struct ExampleMallocCStringHeader
     {
         // The CRT free pairs with the CRT the memory came from. The pointer conversion is the
         // one unavoidable use: Release receives a header by ref.
-        ref ExampleMallocCStringHeader h = ref Unsafe.AsRef(in header);
-        nint pointer = (nint)Unsafe.AsPointer(ref h);
+        ref var h = ref Unsafe.AsRef(in header);
+        var pointer = (nint)Unsafe.AsPointer(ref h);
         _ = OperatingSystem.IsWindows() ? DeclarativePosix.FreeWindows(pointer) : DeclarativePosix.FreePosix(pointer);
     }
 }
@@ -58,13 +56,13 @@ public struct ExampleMallocCStringHeader
 internal static partial class DeclarativePosix
 {
     [LibraryImport("libc", EntryPoint = "getenv", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> GetEnv(string name);
+    private static partial ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial FlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
+    private static partial FlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
 
     [LibraryImport("libc", EntryPoint = "getcwd")]
-    internal static partial ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
+    private static partial ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial nint StrDupRaw(string source);
@@ -77,13 +75,13 @@ internal static partial class DeclarativePosix
 
     public static string BorrowedEnv(string name)
     {
-        ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> value = GetEnv(name);
+        var value = GetEnv(name);
         return value.Length == 0 ? string.Empty : Encoding.ASCII.GetString(value.Elements);
     }
 
     public static string TransferredCopy(string source)
     {
-        using FlexibleArray<ExampleMallocCStringHeader, byte> copy = StrDup(source);
+        using var copy = StrDup(source);
         return Encoding.ASCII.GetString(copy.Span.Elements);
     }
 
@@ -114,13 +112,13 @@ internal static partial class RawPosixPInvoke
 
     public static string BorrowedEnv(string name)
     {
-        nint value = GetEnv(name);
+        var value = GetEnv(name);
         return value == 0 ? string.Empty : Marshal.PtrToStringAnsi(value)!;
     }
 
     public static string TransferredCopy(string source)
     {
-        nint copy = StrDup(source);
+        var copy = StrDup(source);
         if (copy == 0)
         {
             throw new OutOfMemoryException();
@@ -139,13 +137,13 @@ internal static partial class RawPosixPInvoke
     public static string CurrentDirectory()
     {
         Span<byte> buffer = stackalloc byte[1024];
-        nint result = GetCwd(buffer);
+        var result = GetCwd(buffer);
         if (result == 0)
         {
             throw new InvalidOperationException("getcwd failed");
         }
 
-        int length = buffer.IndexOf((byte)0);
+        var length = buffer.IndexOf((byte)0);
         return Encoding.ASCII.GetString(buffer[..length]);
     }
 }
@@ -176,10 +174,10 @@ public sealed unsafe class PosixExamples
 
         // A pointer from a legacy binding adopts as writable or read-only and releases
         // through the header policy.
-        nint raw = DeclarativePosix.StrDupRaw("hello!");
+        var raw = DeclarativePosix.StrDupRaw("hello!");
         Assert.NotEqual(0, raw);
 
-        using FlexibleArray<ExampleMallocCStringHeader, byte> array =
+        var array =
             FlexibleArrayTransfer.Adopt<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(6, array.Length);
         Assert.Equal("hello!"u8.ToArray(), array.Span.Elements.ToArray());
@@ -196,10 +194,10 @@ public sealed unsafe class PosixExamples
             return;
         }
 
-        nint raw = DeclarativePosix.StrDupRaw("readonly!");
+        var raw = DeclarativePosix.StrDupRaw("readonly!");
         Assert.NotEqual(0, raw);
 
-        using ReadOnlyFlexibleArray<ExampleMallocCStringHeader, byte> array =
+        using var array =
             FlexibleArrayTransfer.AdoptReadOnly<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(9, array.Length);
         Assert.Equal("readonly!"u8.ToArray(), array.ReadOnlySpan.Elements.ToArray());

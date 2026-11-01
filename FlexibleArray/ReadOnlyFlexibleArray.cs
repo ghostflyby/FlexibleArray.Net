@@ -57,7 +57,7 @@ public unsafe class ReadOnlyFlexibleArray<THeader, T> : IDisposable
     public static ReadOnlyFlexibleArray<THeader, T> Create(ReadOnlyMemory<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        int requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
         if (buffer.Length < requiredBytes)
         {
             throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));

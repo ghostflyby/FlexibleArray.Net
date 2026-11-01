@@ -2,7 +2,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
-using FlexibleArray;
 
 namespace FlexibleArray.Tests;
 
@@ -16,23 +15,23 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void Marshaller_PinsHeaderAndTailForTheCall()
     {
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 7 }, [5, 6]);
 
         FlexibleArrayMarshaller<PacketHeader, int>.ClassMarshaller marshaller = default;
         marshaller.FromManaged(array);
         try
         {
-            PacketHeader* pointer = marshaller.ToUnmanaged();
+            var pointer = marshaller.ToUnmanaged();
 
-            ref PacketHeader header = ref Unsafe.AsRef<PacketHeader>(pointer);
+            ref var header = ref Unsafe.AsRef<PacketHeader>(pointer);
             Assert.Equal(2, header.Count);
             Assert.Equal(7, header.Timestamp);
-            ref byte headerStart = ref Unsafe.As<PacketHeader, byte>(ref header);
-            ref byte firstElement = ref Unsafe.As<int, byte>(ref PacketHeader.GetFirstElement(ref header));
+            ref var headerStart = ref Unsafe.As<PacketHeader, byte>(ref header);
+            ref var firstElement = ref Unsafe.As<int, byte>(ref PacketHeader.GetFirstElement(ref header));
             Assert.Equal(16, Unsafe.ByteOffset(ref headerStart, ref firstElement));
 
-            Span<int> tail = MemoryMarshal.CreateSpan(ref PacketHeader.GetFirstElement(ref header), 2);
+            var tail = MemoryMarshal.CreateSpan(ref PacketHeader.GetFirstElement(ref header), 2);
             Assert.Equal(5, tail[0]);
             Assert.Equal(6, tail[1]);
         }
@@ -47,11 +46,11 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     {
         FlexibleArrayMarshaller<PacketHeader, int>.ClassMarshaller marshaller = default;
         Assert.Throws<ArgumentNullException>(
-            () => marshaller.FromManaged((FlexibleArray<PacketHeader, int>)null!));
+            () => marshaller.FromManaged(null!));
         Assert.Throws<ArgumentNullException>(
             () => marshaller.FromManaged((ReadOnlyFlexibleArray<PacketHeader, int>)null!));
 
-        FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 0 }, ReadOnlySpan<int>.Empty);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => marshaller.FromManaged(array));
@@ -60,15 +59,15 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void DefaultMarshalling_IsWiredThroughNativeMarshalling()
     {
-        NativeMarshallingAttribute? nativeMarshalling = typeof(FlexibleArray<PacketHeader, int>)
+        var nativeMarshalling = typeof(FlexibleArray<PacketHeader, int>)
             .GetCustomAttributes<NativeMarshallingAttribute>()
             .SingleOrDefault();
         Assert.NotNull(nativeMarshalling);
-        Assert.True(nativeMarshalling!.NativeType.IsGenericTypeDefinition);
+        Assert.True(nativeMarshalling.NativeType.IsGenericTypeDefinition);
         Assert.Equal(typeof(FlexibleArrayMarshaller<,>), nativeMarshalling.NativeType);
 
         // The single entry point hosts registrations for all four types; check the matrix.
-        List<CustomMarshallerAttribute> registrations = typeof(FlexibleArrayMarshaller<PacketHeader, int>)
+        var registrations = typeof(FlexibleArrayMarshaller<PacketHeader, int>)
             .GetCustomAttributes<CustomMarshallerAttribute>()
             .ToList();
         Assert.Equal(8, registrations.Count);
@@ -101,12 +100,12 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             return;
         }
 
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
 
         // Rebuild the exact object bytes: header write first, then the tail.
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
+        var expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
         expectedView.Header = new PacketHeader { Count = 2, Timestamp = 12345 };
         expectedView.Elements[0] = 10;
         expectedView.Elements[1] = 20;
@@ -123,15 +122,15 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void ConvertToManaged_AnchorsViewAtReturnedPointer()
     {
-        byte[] buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
         view.Header = new PacketHeader { Count = 2 };
         view.Elements[0] = 7;
         view.Elements[1] = 8;
 
         fixed (byte* pointer = buffer)
         {
-            ReadOnlyFlexibleArraySpan<PacketHeader, int> anchored =
+            var anchored =
                 FlexibleArrayMarshaller<PacketHeader, int>.ReadOnlySpanMarshaller.ConvertToManaged((PacketHeader*)pointer);
 
             Assert.Equal(2, anchored.Length);
@@ -145,14 +144,14 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     {
         // A received object already carries its header; the anchoring constructor snapshots
         // the tail length from it.
-        byte[] buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> source = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        var source = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
         source.Header = new PacketHeader { Count = 2 };
         source.Elements[0] = 5;
 
         fixed (byte* pointer = buffer)
         {
-            FlexibleArraySpan<PacketHeader, int> view =
+            var view =
                 FlexibleArrayMarshaller<PacketHeader, int>.WritableSpanMarshaller.ConvertToManaged((PacketHeader*)pointer);
 
             Assert.Equal(2, view.Length);
@@ -177,7 +176,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void ClassMarshaller_PinsReadOnlyObjectsForTheCall()
     {
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 1, Timestamp = 3 }, [6]);
         ReadOnlyFlexibleArray<PacketHeader, int> readOnly = array;
 
@@ -202,7 +201,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         }
 
         Span<byte> buffer = stackalloc byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
         view.Header = new PacketHeader { Count = 2 };
         view.Elements[0] = 10;
         view.Elements[1] = 20;
@@ -223,12 +222,12 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             return;
         }
 
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 77 }, [30, 40]);
         ReadOnlyFlexibleArraySpan<PacketHeader, int> view = array.Span;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
+        var expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
         expectedView.Header = new PacketHeader { Count = 2, Timestamp = 77 };
         expectedView.Elements[0] = 30;
         expectedView.Elements[1] = 40;
@@ -250,7 +249,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         Assert.Equal(0, NativeEnv.SetEnv("FA_RECV_WRITABLE", "hi!", overwrite: 1));
         try
         {
-            FlexibleArraySpan<CStrHeader, byte> value = NativeEnv.GetEnvWritable("FA_RECV_WRITABLE");
+            var value = NativeEnv.GetEnvWritable("FA_RECV_WRITABLE");
             Assert.Equal(3, value.Length);
             Assert.Equal("hi!"u8.ToArray(), value.Elements.ToArray());
         }
@@ -268,12 +267,12 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             return;
         }
 
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
         ReadOnlyFlexibleArray<PacketHeader, int> readOnly = array;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
+        var expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
         expectedView.Header = new PacketHeader { Count = 2, Timestamp = 12345 };
         expectedView.Elements[0] = 10;
         expectedView.Elements[1] = 20;
@@ -302,7 +301,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         Assert.Equal(0, NativeEnv.SetEnv("FA_RECV_TEST", "hello!", overwrite: 1));
         try
         {
-            ReadOnlyFlexibleArraySpan<CStrHeader, byte> value = NativeEnv.GetEnv("FA_RECV_TEST");
+            var value = NativeEnv.GetEnv("FA_RECV_TEST");
             Assert.Equal(6, value.Length);
             Assert.Equal("hello!"u8.ToArray(), value.Elements.ToArray());
         }
