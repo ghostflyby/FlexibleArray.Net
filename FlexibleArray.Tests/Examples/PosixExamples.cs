@@ -43,8 +43,7 @@ public struct ExampleMallocCStringHeader
     {
         // The CRT free pairs with the CRT the memory came from. The pointer conversion is the
         // one unavoidable use: Release receives a header by ref.
-        ref var h = ref Unsafe.AsRef(in header);
-        var pointer = (nint)Unsafe.AsPointer(ref h);
+        var pointer = (nint)Unsafe.AsPointer(ref header);
         _ = OperatingSystem.IsWindows() ? DeclarativePosix.FreeWindows(pointer) : DeclarativePosix.FreePosix(pointer);
     }
 }

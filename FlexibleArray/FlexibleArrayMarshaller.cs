@@ -62,8 +62,7 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
             throw new InvalidOperationException("A default-constructed ReadOnlyFlexibleArraySpan has no backing storage.");
         }
 
-        ref var header = ref Unsafe.AsRef(in reference);
-        return (THeader*)Unsafe.AsPointer(ref header);
+        return (THeader*)Unsafe.AsPointer(in reference);
     }
 
     /// <summary>Receives writable span views from returned native pointers.</summary>

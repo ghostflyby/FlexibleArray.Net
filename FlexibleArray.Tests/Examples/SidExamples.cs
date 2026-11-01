@@ -29,8 +29,7 @@ public struct SidHeader
     {
         // The only unavoidable pointer: Release receives a header by ref, and the native
         // contract takes an address.
-        ref var h = ref Unsafe.AsRef(in header);
-        _ = DeclarativeSid.FreeSid((nint)Unsafe.AsPointer(ref h));
+        _ = DeclarativeSid.FreeSid((nint)Unsafe.AsPointer(ref header));
     }
 }
 
