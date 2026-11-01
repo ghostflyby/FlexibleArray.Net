@@ -6,7 +6,8 @@ namespace FlexibleArray.Tests;
 
 /// <summary>Sample header: int + long + int. 64-bit LP64 layout: 0/8/16, size 24.</summary>
 [StructLayout(LayoutKind.Sequential)]
-public struct PacketHeader : IFlexibleArrayHeader<PacketHeader, int>
+public struct PacketHeader
+    : IFlexibleArrayHeader<PacketHeader, int>, IConstructibleFlexibleArrayHeader<PacketHeader, int>
 {
     public int Count;
     public long Timestamp;
@@ -14,6 +15,7 @@ public struct PacketHeader : IFlexibleArrayHeader<PacketHeader, int>
 
     public static ref int GetFirstElement(ref PacketHeader header) => ref header.FirstElement;
     public static int GetTailElementCount(scoped in PacketHeader header) => header.Count;
+    public PacketHeader WithTailElementCount(int count) => this with { Count = count };
 }
 
 /// <summary>
@@ -177,4 +179,20 @@ public struct CStrHeader : IFlexibleArrayHeader<CStrHeader, byte>
 
         return length;
     }
+}
+
+/// <summary>
+/// A deliberately asymmetric contract implementation: the write-back adds one, so unified
+/// construction must reject the pair instead of building a corrupt object.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct BrokenSetHeader
+    : IFlexibleArrayHeader<BrokenSetHeader, int>, IConstructibleFlexibleArrayHeader<BrokenSetHeader, int>
+{
+    public int Count;
+    public int FirstElement;
+
+    public static ref int GetFirstElement(ref BrokenSetHeader header) => ref header.FirstElement;
+    public static int GetTailElementCount(scoped in BrokenSetHeader header) => header.Count;
+    public BrokenSetHeader WithTailElementCount(int count) => this with { Count = count + 1 };
 }

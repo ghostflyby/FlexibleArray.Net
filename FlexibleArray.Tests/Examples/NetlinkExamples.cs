@@ -26,9 +26,11 @@ internal static class Netlink
 }
 
 // The header contracts: nlmsghdr and nlattr are flexible array objects with byte tails whose
-// lengths cover their own headers.
+// lengths cover their own headers. Both register the reverse write-back so unified
+// construction converts an element count into the byte-length field automatically.
 [StructLayout(LayoutKind.Sequential)]
-internal struct NlmsgHeader : IFlexibleArrayHeader<NlmsgHeader, byte>
+internal struct NlmsgHeader
+    : IFlexibleArrayHeader<NlmsgHeader, byte>, IConstructibleFlexibleArrayHeader<NlmsgHeader, byte>
 {
     public uint Len;
     public ushort Type;
@@ -41,10 +43,12 @@ internal struct NlmsgHeader : IFlexibleArrayHeader<NlmsgHeader, byte>
 
     // nlmsg_len covers the 16-byte header itself; the payload is the byte tail.
     public static int GetTailElementCount(scoped in NlmsgHeader header) => (int)header.Len - Netlink.NlmsgHdrlen;
+    public NlmsgHeader WithTailElementCount(int count) => this with { Len = (uint)(Netlink.NlmsgHdrlen + count) };
 }
 
 [StructLayout(LayoutKind.Sequential)]
-internal struct NlattrHeader : IFlexibleArrayHeader<NlattrHeader, byte>
+internal struct NlattrHeader
+    : IFlexibleArrayHeader<NlattrHeader, byte>, IConstructibleFlexibleArrayHeader<NlattrHeader, byte>
 {
     public ushort Len;
     public ushort Type;
@@ -54,6 +58,7 @@ internal struct NlattrHeader : IFlexibleArrayHeader<NlattrHeader, byte>
 
     // nla_len covers the 4-byte attribute header and excludes trailing alignment padding.
     public static int GetTailElementCount(scoped in NlattrHeader header) => header.Len - Netlink.NlaHdrlen;
+    public NlattrHeader WithTailElementCount(int count) => this with { Len = (ushort)(Netlink.NlaHdrlen + count) };
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -381,23 +386,19 @@ public sealed class NetlinkExamples
     {
         // One RTM_NEWLINK message: nlmsghdr(16) + ifinfomsg(16) + two IFLA_IFNAME attributes
         // with unaligned lengths (7 and 9), so a walk must apply NLA_ALIGN to reach the second
-        // one; then NLMSG_DONE: nlmsghdr(16) + error code(4).
+        // one; then NLMSG_DONE: nlmsghdr(16) + error code(4). The nlmsg_len/nla_len fields are
+        // stamped from the element counts by unified construction — no hand-filled lengths.
         Span<byte> datagram = new byte[72];
 
+        // The top message stays on the raw form: its payload is assembled progressively, so
+        // nlmsg_len covers nested content that no element count can express yet.
         var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram, 36);
         message.Header = new NlmsgHeader { Len = 52, Type = Netlink.RtmNewlink, Seq = 1 };
         var attributes = message.Elements[16..];
 
-        var loopback = MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes, 3);
-        loopback.Header = new NlattrHeader { Len = 7, Type = Netlink.IflaIfname };
-        "lo\0"u8.CopyTo(loopback.Elements);
-
-        var ethernet = MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes[8..], 5);
-        ethernet.Header = new NlattrHeader { Len = 9, Type = Netlink.IflaIfname };
-        "eth0\0"u8.CopyTo(ethernet.Elements);
-
-        var done = MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], 4);
-        done.Header = new NlmsgHeader { Len = 20, Type = Netlink.NlmsgDone, Seq = 1 };
+        MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes, new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
+        MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes[8..], new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
+        MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
 
         // Both request builders produce byte-identical datagrams.
         Span<byte> declaredRequest = new byte[32];
