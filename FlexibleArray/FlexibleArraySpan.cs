@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace FlexibleArray;
 
@@ -12,6 +13,7 @@ namespace FlexibleArray;
 /// first-element placeholder field together with any trailing header padding, overwriting the
 /// region overlapped by the tail. Initialize by writing the header first, then the tail.
 /// </remarks>
+[NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
 public readonly ref struct FlexibleArraySpan<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged

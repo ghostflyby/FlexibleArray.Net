@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace FlexibleArray;
 
@@ -8,6 +9,7 @@ namespace FlexibleArray;
 /// <see cref="ReadOnlyMemory{T}"/> of bytes.
 /// </summary>
 /// <remarks>Lifetime semantics match <see cref="FlexibleArrayMemory{THeader, T}"/>.</remarks>
+[NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
 public readonly struct ReadOnlyFlexibleArrayMemory<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
@@ -23,6 +25,9 @@ public readonly struct ReadOnlyFlexibleArrayMemory<THeader, T>
 
     /// <summary>Gets the logical number of tail elements.</summary>
     public int Length => _length;
+
+    /// <summary>Gets the backing buffer; used by the interop marshaller to pin the object.</summary>
+    internal ReadOnlyMemory<byte> Buffer => _buffer;
 
     /// <summary>Projects a fresh read-only Span view on each call.</summary>
     /// <exception cref="InvalidOperationException">The view is default-constructed and has no backing storage.</exception>

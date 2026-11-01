@@ -30,10 +30,18 @@ FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>.Header.get -> THeader
 FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>.Length.get -> int
 FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>.ReadOnlyFlexibleArraySpan() -> void
 FlexibleArray.FlexibleArrayMarshaller<THeader, T>
-FlexibleArray.FlexibleArrayMarshaller<THeader, T>.FlexibleArrayMarshaller() -> void
-FlexibleArray.FlexibleArrayMarshaller<THeader, T>.FromManaged(FlexibleArray.FlexibleArrayMemory<THeader, T> managed) -> void
-FlexibleArray.FlexibleArrayMarshaller<THeader, T>.Free() -> void
-FlexibleArray.FlexibleArrayMarshaller<THeader, T>.ToUnmanaged() -> THeader*
+static FlexibleArray.FlexibleArrayMarshaller<THeader, T>.ConvertToUnmanaged(FlexibleArray.FlexibleArraySpan<THeader, T> span) -> THeader*
+static FlexibleArray.FlexibleArrayMarshaller<THeader, T>.ConvertToUnmanaged(FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T> span) -> THeader*
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.MemoryMarshaller
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.MemoryMarshaller.Free() -> void
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.MemoryMarshaller.FromManaged(FlexibleArray.FlexibleArrayMemory<THeader, T> managed) -> void
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.MemoryMarshaller.FromManaged(FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T> managed) -> void
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.MemoryMarshaller.MemoryMarshaller() -> void
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.MemoryMarshaller.ToUnmanaged() -> THeader*
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.ReadOnlySpanMarshaller
+static FlexibleArray.FlexibleArrayMarshaller<THeader, T>.ReadOnlySpanMarshaller.ConvertToManaged(THeader* pointer) -> FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>
+FlexibleArray.FlexibleArrayMarshaller<THeader, T>.WritableSpanMarshaller
+static FlexibleArray.FlexibleArrayMarshaller<THeader, T>.WritableSpanMarshaller.ConvertToManaged(THeader* pointer) -> FlexibleArray.FlexibleArraySpan<THeader, T>
 FlexibleArray.MemoryPoolExtensions
 static FlexibleArray.MemoryPoolExtensions.Create<THeader, T>(this System.Buffers.MemoryPool<byte>! pool, in THeader header, System.ReadOnlySpan<T> elements, out FlexibleArray.FlexibleArrayMemory<THeader, T> view) -> System.Buffers.IMemoryOwner<byte>!
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.ElementSize.get -> int
@@ -48,5 +56,3 @@ static FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>.Create(System.ReadOnl
 static FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>.TryParse(System.ReadOnlySpan<byte> buffer, out FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T> view) -> bool
 FlexibleArray.FlexibleArraySpan<THeader, T>.FlexibleArraySpan(ref THeader header) -> void
 FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>.ReadOnlyFlexibleArraySpan(in THeader header) -> void
-FlexibleArray.ReadOnlyFlexibleArraySpanMarshaller<THeader, T>
-static FlexibleArray.ReadOnlyFlexibleArraySpanMarshaller<THeader, T>.ConvertToManaged(THeader* pointer) -> FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>
