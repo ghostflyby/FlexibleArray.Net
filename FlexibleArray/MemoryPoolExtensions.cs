@@ -27,9 +27,9 @@ public static class MemoryPoolExtensions
         where T : unmanaged
     {
         ArgumentNullException.ThrowIfNull(pool);
-        int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
 
-        IMemoryOwner<byte> rental = pool.Rent(byteLength);
+        var rental = pool.Rent(byteLength);
         try
         {
             return FlexibleArray<THeader, T>.Create(rental.Memory, header, elements).WithOwner(rental);

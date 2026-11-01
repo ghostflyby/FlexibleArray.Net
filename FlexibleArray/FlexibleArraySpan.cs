@@ -56,13 +56,13 @@ public readonly ref struct FlexibleArraySpan<THeader, T>
     public static FlexibleArraySpan<THeader, T> Create(Span<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        int requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
         if (buffer.Length < requiredBytes)
         {
             throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
         }
 
-        ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         return new FlexibleArraySpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
     }
 

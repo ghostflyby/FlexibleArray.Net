@@ -18,7 +18,7 @@ public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THe
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
-    internal FlexibleArray(ReadOnlyMemory<byte> buffer, int length, IMemoryOwner<byte>? owner)
+    private FlexibleArray(ReadOnlyMemory<byte> buffer, int length, IMemoryOwner<byte>? owner)
         : base(buffer, length, owner)
     {
     }
@@ -39,21 +39,21 @@ public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THe
     /// <exception cref="OverflowException">The aligned backing exceeds <see cref="int"/> bytes.</exception>
     public static FlexibleArray<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
     {
-        int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
-        nuint alignment = FlexibleArrayLayout<THeader, T>.RequiredAlignment;
-        long allocatedLength = (long)byteLength + (long)alignment - 1;
+        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        var alignment = FlexibleArrayLayout<THeader, T>.RequiredAlignment;
+        var allocatedLength = byteLength + (long)alignment - 1;
         if (allocatedLength > int.MaxValue)
         {
             throw new OverflowException($"The flexible array needs {allocatedLength} bytes of backing, which exceeds int.MaxValue.");
         }
 
-        byte[] array = GC.AllocateArray<byte>((int)allocatedLength, pinned: true);
+        var array = GC.AllocateArray<byte>((int)allocatedLength, pinned: true);
 
         // The array never moves, so advancing the window to the first aligned position pins
         // the alignment for the object's whole lifetime.
-        ref byte start = ref MemoryMarshal.GetArrayDataReference(array);
-        nuint address = (nuint)Unsafe.AsPointer(ref start);
-        int offset = (int)(((address + alignment - 1) & ~(alignment - 1)) - address);
+        ref var start = ref MemoryMarshal.GetArrayDataReference(array);
+        var address = (nuint)Unsafe.AsPointer(ref start);
+        var offset = (int)(((address + alignment - 1) & ~(alignment - 1)) - address);
         return Build(new Memory<byte>(array, offset, byteLength), header, elements);
     }
 
@@ -70,8 +70,8 @@ public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THe
     public static FlexibleArray<THeader, T> Create(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
     {
         ArgumentNullException.ThrowIfNull(allocator);
-        int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
-        Memory<byte> buffer = allocator(byteLength);
+        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        var buffer = allocator(byteLength);
         if (buffer.Length < byteLength)
         {
             throw new ArgumentException($"The allocator returned {buffer.Length} bytes but at least {byteLength} are required.", nameof(allocator));
@@ -100,7 +100,7 @@ public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THe
     public static FlexibleArray<THeader, T> Create(Memory<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        int requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
         if (buffer.Length < requiredBytes)
         {
             throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
@@ -141,7 +141,7 @@ public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THe
     // then the tail, then the declared-length consistency check.
     private static FlexibleArray<THeader, T> Build(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
     {
-        FlexibleArraySpan<THeader, T> view = FlexibleArraySpan<THeader, T>.Create(buffer.Span, elements.Length);
+        var view = FlexibleArraySpan<THeader, T>.Create(buffer.Span, elements.Length);
         view.Header = header;
         elements.CopyTo(view.Elements);
         if (THeader.GetTailLength(view.Header) != elements.Length)

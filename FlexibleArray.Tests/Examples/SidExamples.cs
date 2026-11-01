@@ -29,7 +29,7 @@ public struct SidHeader
     {
         // The only unavoidable pointer: Release receives a header by ref, and the native
         // contract takes an address.
-        ref SidHeader h = ref Unsafe.AsRef(in header);
+        ref var h = ref Unsafe.AsRef(in header);
         _ = DeclarativeSid.FreeSid((nint)Unsafe.AsPointer(ref h));
     }
 }
@@ -80,14 +80,14 @@ internal static partial class DeclarativeSid
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
         if (AllocateAndInitializeSid(
-                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out FlexibleArray<SidHeader, uint>? sid) == 0)
+                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid) == 0)
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
 
         using (sid)
         {
-            return sid!.Span.Elements.ToArray();
+            return [.. sid!.Span.Elements];
         }
     }
 }
@@ -121,7 +121,7 @@ internal static partial class RawSidPInvoke
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
         if (AllocateAndInitializeSid(
-                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out nint sid) == 0)
+                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid) == 0)
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
@@ -130,8 +130,8 @@ internal static partial class RawSidPInvoke
         {
             // Hand-computed geometry: count lives at offset 1, sub authorities at offset 8.
             int actual = Marshal.ReadByte(sid, 1);
-            uint[] subAuthorities = new uint[actual];
-            for (int i = 0; i < actual; i++)
+            var subAuthorities = new uint[actual];
+            for (var i = 0; i < actual; i++)
             {
                 subAuthorities[i] = unchecked((uint)Marshal.ReadInt32(sid, 8 + 4 * i));
             }
@@ -156,7 +156,7 @@ public sealed class SidExamples
             return;
         }
 
-        SidIdentifierAuthority authority = SidIdentifierAuthority.NtAuthority;
+        var authority = SidIdentifierAuthority.NtAuthority;
         Assert.Equal(RawSidPInvoke.ReadSubAuthorities(authority, 3), DeclarativeSid.ReadSubAuthorities(authority, 3));
     }
 
@@ -172,16 +172,16 @@ public sealed class SidExamples
             return;
         }
 
-        SidIdentifierAuthority authority = SidIdentifierAuthority.NtAuthority;
+        var authority = SidIdentifierAuthority.NtAuthority;
         if (DeclarativeSid.AllocateAndInitializeSid(
-                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out FlexibleArray<SidHeader, uint>? sid) == 0)
+                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out var sid) == 0)
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
 
         using (sid)
         {
-            using System.Buffers.MemoryHandle pinned = sid!.Pin();
+            using var pinned = sid!.Pin();
 
             // The OS agrees with our geometry: its tail pointer equals header + our offset,
             // and the stride arithmetic lands the second element where it should.
@@ -189,7 +189,7 @@ public sealed class SidExamples
                 (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset);
             Assert.Equal(DeclarativeSid.GetSidSubAuthority((nint)pinned.Pointer, 1),
                 (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset + sizeof(uint));
-            Assert.Equal(new uint[] { 11u, 22u }, sid.Span.Elements.ToArray());
+            Assert.Equal([11u, 22u], sid.Span.Elements);
         }
     }
 
@@ -203,11 +203,11 @@ public sealed class SidExamples
 
         // Pointers that arrive outside a declarative signature (legacy DllImport shapes)
         // still adopt and release through the header policy.
-        SidIdentifierAuthority authority = SidIdentifierAuthority.NtAuthority;
+        var authority = SidIdentifierAuthority.NtAuthority;
         Assert.NotEqual(0, RawSidPInvoke.AllocateAndInitializeSid(
-            authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out nint raw));
+            authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var raw));
 
-        using FlexibleArray<SidHeader, uint> sid = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)raw);
+        using var sid = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)raw);
         Assert.Equal(1, sid.Length);
         Assert.Equal(7u, sid.Span.Elements[0]);
     }

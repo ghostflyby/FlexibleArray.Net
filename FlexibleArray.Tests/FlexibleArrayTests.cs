@@ -12,7 +12,7 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void Create_WithManagedBacking_BuildsCompleteObject()
     {
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 3, Timestamp = 5 }, [7, 8, 9]);
 
         Assert.Equal(3, array.Length);
@@ -25,9 +25,9 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void Create_WithAllocator_UsesProvidedStorage()
     {
-        int requested = 0;
+        var requested = 0;
         Memory<byte> storage = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             byteLength =>
             {
                 requested = byteLength;
@@ -45,7 +45,7 @@ public sealed class FlexibleArrayTests
     public void Create_OverExistingMemory_BuildsContent()
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             buffer, new PacketHeader { Count = 2 }, [8, 9]);
 
         Assert.Equal(new[] { 8, 9 }, array.Span.Elements.ToArray());
@@ -65,7 +65,7 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void Create_WithZeroElements_PreservesPlaceholder()
     {
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 0, FirstElement = -1 }, ReadOnlySpan<int>.Empty);
 
         Assert.Equal(0, array.Length);
@@ -76,12 +76,12 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void Create_WithNonBlittableElements_RoundTrips()
     {
-        using FlexibleArray<CharHeader, char> chars = FlexibleArray<CharHeader, char>.Create(
+        using var chars = FlexibleArray<CharHeader, char>.Create(
             new CharHeader { Count = 3 }, ['a', 'b', 'c']);
         Assert.Equal(new[] { 'a', 'b', 'c' }, chars.Span.Elements.ToArray());
         Assert.Equal('a', chars.Header.FirstElement);
 
-        using FlexibleArray<BoolHeader, bool> bools = FlexibleArray<BoolHeader, bool>.Create(
+        using var bools = FlexibleArray<BoolHeader, bool>.Create(
             new BoolHeader { Id = 7, Count = 3 }, [true, false, true]);
         Assert.Equal(new[] { true, false, true }, bools.Span.Elements.ToArray());
         Assert.Equal(7, bools.Header.Id);
@@ -90,11 +90,11 @@ public sealed class FlexibleArrayTests
     [Fact]
     public unsafe void Create_WithManagedBacking_GuaranteesRequiredAlignment()
     {
-        using FlexibleArray<Vector128Header, byte> array = FlexibleArray<Vector128Header, byte>.Create(
+        using var array = FlexibleArray<Vector128Header, byte>.Create(
             new Vector128Header { Count = 3 }, [1, 2, 3]);
 
-        FlexibleArraySpan<Vector128Header, byte> view = array.Span;
-        nuint address = (nuint)Unsafe.AsPointer(ref view.Header);
+        var view = array.Span;
+        var address = (nuint)Unsafe.AsPointer(ref view.Header);
         // sizeof(Vector128Header) = 48, so the conservative policy demands 64-byte alignment.
         Assert.True(FlexibleArrayLayout<Vector128Header, byte>.RequiredAlignment == 64);
         Assert.True(address % FlexibleArrayLayout<Vector128Header, byte>.RequiredAlignment == 0);
@@ -104,13 +104,13 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
     {
-        byte[] buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        FlexibleArraySpan<PacketHeader, int> view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
         view.Header = new PacketHeader { Count = 2 };
         view.Elements[0] = 4;
         view.Elements[1] = 5;
 
-        using ReadOnlyFlexibleArray<PacketHeader, int> memory =
+        using var memory =
             ReadOnlyFlexibleArray<PacketHeader, int>.Create(buffer, 2);
 
         Assert.Equal(2, memory.Length);
@@ -120,7 +120,7 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void ReferenceConversion_WritableIsAReadOnly()
     {
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2 }, [5, 6]);
         ReadOnlyFlexibleArray<PacketHeader, int> readOnly = array;
 
@@ -136,7 +136,7 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void Create_FromPool_DisposeReturnsTheRental()
     {
-        using FlexibleArray<PacketHeader, int> array = MemoryPool<byte>.Shared.Create(
+        var array = MemoryPool<byte>.Shared.Create(
             new PacketHeader { Count = 3, Timestamp = 4 }, [1, 2, 3]);
 
         Assert.Equal(3, array.Length);
@@ -150,7 +150,7 @@ public sealed class FlexibleArrayTests
     [Fact]
     public void Dispose_OfManagedObject_CollectsWithTheGc()
     {
-        FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 1 }, [1]);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Span; });
@@ -160,11 +160,11 @@ public sealed class FlexibleArrayTests
     [Fact]
     public unsafe void Pin_ReturnsStableObjectPointer()
     {
-        using FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(
+        var array = FlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 9 }, [4, 5]);
 
-        using MemoryHandle handle = array.Pin();
-        ref PacketHeader header = ref Unsafe.AsRef<PacketHeader>(handle.Pointer);
+        using var handle = array.Pin();
+        ref var header = ref Unsafe.AsRef<PacketHeader>(handle.Pointer);
         Assert.Equal(9, header.Timestamp);
         Assert.Equal(4, PacketHeader.GetFirstElement(ref header));
 

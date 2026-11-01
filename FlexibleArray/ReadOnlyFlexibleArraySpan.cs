@@ -46,7 +46,7 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
             // Recover a writable reference via Unsafe.AsRef so the header can be passed by ref
             // to the static contract member; read-onlyness is enforced by the returned
             // ReadOnlySpan.
-            ref THeader header = ref Unsafe.AsRef(in _header);
+            ref var header = ref Unsafe.AsRef(in _header);
             return MemoryMarshal.CreateReadOnlySpan(ref THeader.GetFirstElement(ref header), _length);
         }
     }
@@ -60,13 +60,13 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     public static ReadOnlyFlexibleArraySpan<THeader, T> Create(ReadOnlySpan<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        int requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
         if (buffer.Length < requiredBytes)
         {
             throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
         }
 
-        ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         return new ReadOnlyFlexibleArraySpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
     }
 
@@ -87,9 +87,9 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
             return false;
         }
 
-        ref byte firstByte = ref MemoryMarshal.GetReference(buffer);
-        ref THeader header = ref Unsafe.As<byte, THeader>(ref firstByte);
-        int length = THeader.GetTailLength(in header);
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref var header = ref Unsafe.As<byte, THeader>(ref firstByte);
+        var length = THeader.GetTailLength(in header);
         long capacity = (buffer.Length - FlexibleArrayLayout<THeader, T>.FirstElementOffset)
             / FlexibleArrayLayout<THeader, T>.ElementSize;
         if ((uint)length > (uint)capacity)
