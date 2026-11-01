@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using FlexibleArray;
 
 namespace FlexibleArray.Tests.Examples;
 
@@ -20,36 +21,9 @@ internal static class Netlink
     public const int NLMSG_HDRLEN = 16;
     public const int NLA_HDRLEN = 4;
     public const int IFINFOMSG_SIZE = 16;
+    public const int ADDR_LEN = 12;
 
     public static int Align4(int length) => (length + 3) & ~3;
-}
-
-[StructLayout(LayoutKind.Sequential)]
-internal struct SockAddrNl
-{
-    public ushort Family;
-    public ushort Pad;
-    public uint Pid;
-    public uint Groups;
-}
-
-// Shared socket transport: plain blittable signatures — structs by in, buffers by spans.
-internal static partial class NetlinkSocket
-{
-    [LibraryImport("libc", EntryPoint = "socket", SetLastError = true)]
-    internal static partial int Socket(int domain, int type, int protocol);
-
-    [LibraryImport("libc", EntryPoint = "bind", SetLastError = true)]
-    internal static partial int Bind(int fd, in SockAddrNl addr, uint len);
-
-    [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
-    internal static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst, uint dstLen);
-
-    [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
-    internal static partial long RecvFrom(int fd, Span<byte> buf, int flags);
-
-    [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
-    internal static partial int Close(int fd);
 }
 
 // The header contracts: nlmsghdr and nlattr are flexible array objects with byte tails whose
@@ -83,13 +57,37 @@ internal struct NlattrHeader : IFlexibleArrayHeader<NlattrHeader, byte>
     public static int GetTailLength(scoped in NlattrHeader header) => header.Len - Netlink.NLA_HDRLEN;
 }
 
-/// <summary>
-/// The library path: each nlmsghdr message and each nlattr record is a complete-object view
-/// anchored where it lies — the header contract derives the tail, and header fields are typed
-/// members, not offsets.
-/// </summary>
-internal static class DeclarativeNetlink
+[StructLayout(LayoutKind.Sequential)]
+internal struct SockAddrNl
 {
+    public ushort Family;
+    public ushort Pad;
+    public uint Pid;
+    public uint Groups;
+}
+
+/// <summary>
+/// The library path end to end: socket signatures in modern form (structs by in, buffers by
+/// spans), the dump request built through a typed view, and each nlmsghdr/nlattr anchored as
+/// a complete object whose header contract derives the tail.
+/// </summary>
+internal static partial class DeclarativeNetlink
+{
+    [LibraryImport("libc", EntryPoint = "socket", SetLastError = true)]
+    private static partial int Socket(int domain, int type, int protocol);
+
+    [LibraryImport("libc", EntryPoint = "bind", SetLastError = true)]
+    private static partial int Bind(int fd, in SockAddrNl addr, uint len);
+
+    [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
+    private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst, uint dstLen);
+
+    [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
+    private static partial long RecvFrom(int fd, Span<byte> buf, int flags);
+
+    [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static partial int Close(int fd);
+
     public static void BuildDumpRequest(Span<byte> request)
     {
         FlexibleArraySpan<NlmsgHeader, byte> message = FlexibleArraySpan<NlmsgHeader, byte>.Create(
@@ -101,6 +99,64 @@ internal static class DeclarativeNetlink
             Flags = Netlink.NLM_F_REQUEST | Netlink.NLM_F_DUMP,
             Seq = 1,
         };
+    }
+
+    public static List<string> DumpLinkNames()
+    {
+        int fd = Socket(Netlink.AF_NETLINK, Netlink.SOCK_RAW, Netlink.NETLINK_ROUTE);
+        if (fd < 0)
+        {
+            throw new InvalidOperationException($"socket() failed with errno {Marshal.GetLastWin32Error()}");
+        }
+
+        try
+        {
+            SockAddrNl local = new() { Family = Netlink.AF_NETLINK };
+            if (Bind(fd, local, Netlink.ADDR_LEN) != 0)
+            {
+                throw new InvalidOperationException($"bind() failed with errno {Marshal.GetLastWin32Error()}");
+            }
+
+            Span<byte> request = new byte[32];
+            BuildDumpRequest(request);
+            SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
+            long sent = SendTo(fd, request, 0, kernel, Netlink.ADDR_LEN);
+            if (sent != request.Length)
+            {
+                throw new InvalidOperationException($"sendto() failed with errno {Marshal.GetLastWin32Error()}");
+            }
+
+            List<string> names = [];
+            Span<byte> response = new byte[65536];
+            bool finished = false;
+            for (int round = 0; round < 16 && !finished; round++)
+            {
+                long received = RecvFrom(fd, response, 0);
+                if (received <= 0)
+                {
+                    throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
+                }
+
+                (List<string> roundNames, finished, List<int> errors) = WalkLinkNames(response[..(int)received]);
+                if (errors.Count > 0)
+                {
+                    throw new InvalidOperationException($"netlink reported errno {-errors[0]}");
+                }
+
+                names.AddRange(roundNames);
+            }
+
+            if (!finished)
+            {
+                throw new InvalidOperationException("the kernel dump did not finish in 16 datagrams");
+            }
+
+            return names;
+        }
+        finally
+        {
+            _ = Close(fd);
+        }
     }
 
     public static (List<string> Names, bool Finished, List<int> Errors) WalkLinkNames(ReadOnlySpan<byte> datagram)
@@ -164,11 +220,95 @@ internal static class DeclarativeNetlink
 }
 
 /// <summary>
-/// The same walk without the library: hand-computed offsets and endianness reads everywhere,
-/// and every header field is a primitive extraction.
+/// The same flow the way it looks without the library: array buffers the marshaller pins
+/// automatically, nint for the addresses the call does not need, the request assembled field
+/// by field with endian writes, and the walk done with hand-computed offsets.
 /// </summary>
-internal static class RawNetlinkPInvoke
+internal static partial class RawNetlinkPInvoke
 {
+    [LibraryImport("libc", EntryPoint = "socket", SetLastError = true)]
+    private static partial int Socket(int domain, int type, int protocol);
+
+    [LibraryImport("libc", EntryPoint = "bind", SetLastError = true)]
+    private static partial int Bind(int fd, in SockAddrNl addr, uint len);
+
+    [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
+    private static partial long SendTo(int fd, byte[] buf, nuint len, int flags, in SockAddrNl dst, uint dstLen);
+
+    [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
+    private static partial long RecvFrom(int fd, byte[] buf, nuint len, int flags, nint src, nint srcLen);
+
+    [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static partial int Close(int fd);
+
+    public static void BuildDumpRequest(Span<byte> request)
+    {
+        // nlmsghdr field by field: len, type, flags, seq (pid and ifinfomsg stay zeroed).
+        BinaryPrimitives.WriteUInt32LittleEndian(request, (uint)request.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(request[4..], (ushort)Netlink.RTM_GETLINK);
+        BinaryPrimitives.WriteUInt16LittleEndian(request[6..], (ushort)(Netlink.NLM_F_REQUEST | Netlink.NLM_F_DUMP));
+        BinaryPrimitives.WriteUInt32LittleEndian(request[8..], 1);
+    }
+
+    public static List<string> DumpLinkNames()
+    {
+        int fd = Socket(Netlink.AF_NETLINK, Netlink.SOCK_RAW, Netlink.NETLINK_ROUTE);
+        if (fd < 0)
+        {
+            throw new InvalidOperationException($"socket() failed with errno {Marshal.GetLastWin32Error()}");
+        }
+
+        try
+        {
+            SockAddrNl local = new() { Family = Netlink.AF_NETLINK };
+            if (Bind(fd, local, Netlink.ADDR_LEN) != 0)
+            {
+                throw new InvalidOperationException($"bind() failed with errno {Marshal.GetLastWin32Error()}");
+            }
+
+            byte[] request = new byte[32];
+            BuildDumpRequest(request);
+            SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
+            long sent = SendTo(fd, request, (nuint)request.Length, 0, kernel, Netlink.ADDR_LEN);
+            if (sent != request.Length)
+            {
+                throw new InvalidOperationException($"sendto() failed with errno {Marshal.GetLastWin32Error()}");
+            }
+
+            List<string> names = [];
+            byte[] response = new byte[65536];
+            bool finished = false;
+            for (int round = 0; round < 16 && !finished; round++)
+            {
+                long received = RecvFrom(fd, response, (nuint)response.Length, 0, 0, 0);
+                if (received <= 0)
+                {
+                    throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
+                }
+
+                (List<string> roundNames, finished, List<int> errors) = WalkLinkNames(
+                    response.AsSpan(0, (int)received));
+                if (errors.Count > 0)
+                {
+                    throw new InvalidOperationException($"netlink reported errno {-errors[0]}");
+                }
+
+                names.AddRange(roundNames);
+            }
+
+            if (!finished)
+            {
+                throw new InvalidOperationException("the kernel dump did not finish in 16 datagrams");
+            }
+
+            return names;
+        }
+        finally
+        {
+            _ = Close(fd);
+        }
+    }
+
     public static (List<string> Names, bool Finished, List<int> Errors) WalkLinkNames(ReadOnlySpan<byte> datagram)
     {
         List<string> names = [];
@@ -228,7 +368,7 @@ internal static class RawNetlinkPInvoke
     }
 }
 
-/// <summary>Side-by-side netlink demos; the two walks always agree on the same datagrams.</summary>
+/// <summary>Side-by-side netlink demos; the two full paths always agree.</summary>
 public sealed class NetlinkExamples
 {
     [Fact]
@@ -254,6 +394,13 @@ public sealed class NetlinkExamples
         FlexibleArraySpan<NlmsgHeader, byte> done = FlexibleArraySpan<NlmsgHeader, byte>.Create(datagram[52..], 4);
         done.Header = new NlmsgHeader { Len = 20, Type = Netlink.NLMSG_DONE, Seq = 1 };
 
+        // Both request builders produce byte-identical datagrams.
+        byte[] declaredRequest = new byte[32];
+        byte[] rawRequest = new byte[32];
+        DeclarativeNetlink.BuildDumpRequest(declaredRequest);
+        RawNetlinkPInvoke.BuildDumpRequest(rawRequest);
+        Assert.Equal(declaredRequest, rawRequest);
+
         (List<string> declared, bool declaredFinished, List<int> declaredErrors) = DeclarativeNetlink.WalkLinkNames(datagram);
         (List<string> raw, bool rawFinished, List<int> rawErrors) = RawNetlinkPInvoke.WalkLinkNames(datagram);
 
@@ -266,54 +413,18 @@ public sealed class NetlinkExamples
     }
 
     [Fact]
-    public void DirectDeclaration_MatchesRawWalk_OnKernelDump()
+    public void DirectDeclaration_MatchesRawPInvoke_OnKernelDump()
     {
         if (!OperatingSystem.IsLinux())
         {
             return;
         }
 
-        int fd = NetlinkSocket.Socket(Netlink.AF_NETLINK, Netlink.SOCK_RAW, Netlink.NETLINK_ROUTE);
-        Assert.True(fd >= 0, $"socket() failed with errno {Marshal.GetLastWin32Error()}");
-        try
-        {
-            Assert.Equal(0, NetlinkSocket.Bind(fd, new SockAddrNl { Family = Netlink.AF_NETLINK }, 12));
+        // Both full paths open their own socket, build their own request, walk their own dump.
+        List<string> declared = DeclarativeNetlink.DumpLinkNames();
+        List<string> raw = RawNetlinkPInvoke.DumpLinkNames();
 
-            Span<byte> request = new byte[32];
-            DeclarativeNetlink.BuildDumpRequest(request);
-            SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
-            long sent = NetlinkSocket.SendTo(fd, request, 0, kernel, (uint)Marshal.SizeOf<SockAddrNl>());
-            Assert.True(sent == request.Length, $"sendto() failed with errno {Marshal.GetLastWin32Error()}");
-
-            Span<byte> response = new byte[65536];
-            List<string> declaredNames = [];
-            List<string> rawNames = [];
-            bool finished = false;
-            for (int round = 0; round < 16 && !finished; round++)
-            {
-                long received = NetlinkSocket.RecvFrom(fd, response, 0);
-                Assert.True(received > 0, $"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
-
-                ReadOnlySpan<byte> datagram = response[..(int)received];
-                (List<string> names, bool done, List<int> errors) = DeclarativeNetlink.WalkLinkNames(datagram);
-                Assert.Empty(errors);
-                declaredNames.AddRange(names);
-
-                (List<string> rawWalk, _, List<int> rawErrors) = RawNetlinkPInvoke.WalkLinkNames(datagram);
-                Assert.Empty(rawErrors);
-                Assert.Equal(names, rawWalk);
-                rawNames.AddRange(rawWalk);
-
-                finished = done;
-            }
-
-            Assert.True(finished);
-            Assert.Contains("lo", declaredNames);
-            Assert.Equal(declaredNames, rawNames);
-        }
-        finally
-        {
-            NetlinkSocket.Close(fd);
-        }
+        Assert.Contains("lo", declared);
+        Assert.Equal(declared, raw);
     }
 }
