@@ -245,8 +245,8 @@ internal static partial class RawNetlinkPInvoke
     {
         // nlmsghdr field by field: len, type, flags, seq (pid and ifinfomsg stay zeroed).
         BinaryPrimitives.WriteUInt32LittleEndian(request, (uint)request.Length);
-        BinaryPrimitives.WriteUInt16LittleEndian(request[4..], (ushort)Netlink.RTM_GETLINK);
-        BinaryPrimitives.WriteUInt16LittleEndian(request[6..], (ushort)(Netlink.NLM_F_REQUEST | Netlink.NLM_F_DUMP));
+        BinaryPrimitives.WriteUInt16LittleEndian(request[4..], Netlink.RTM_GETLINK);
+        BinaryPrimitives.WriteUInt16LittleEndian(request[6..], Netlink.NLM_F_REQUEST | Netlink.NLM_F_DUMP);
         BinaryPrimitives.WriteUInt32LittleEndian(request[8..], 1);
     }
 
@@ -286,8 +286,7 @@ internal static partial class RawNetlinkPInvoke
                     throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
                 }
 
-                (List<string> roundNames, finished, List<int> errors) = WalkLinkNames(
-                    response.AsSpan(0, (int)received));
+                (List<string> roundNames, finished, List<int> errors) = WalkLinkNames(response[..(int)received]);
                 if (errors.Count > 0)
                 {
                     throw new InvalidOperationException($"netlink reported errno {-errors[0]}");
