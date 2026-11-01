@@ -17,7 +17,7 @@ namespace FlexibleArray;
 /// over a movable managed array must not be passed — the backing must be stack, native, or
 /// pinned/pinned-heap memory, and that precondition is the caller's runtime responsibility,
 /// not something a declaration can enforce. Memory-backed objects are pinned by
-/// <see cref="MemoryMarshaller"/> regardless of backing kind; the two kinds share one
+/// <see cref="ClassMarshaller"/> regardless of backing kind; the two kinds share one
 /// stateful shape through FromManaged overloads. The memory-backed types register no receive
 /// direction: a raw pointer cannot produce a Memory. Default-constructed objects are rejected
 /// instead of marshalling to a silent NULL pointer. Runtime-based DllImport ignores custom
@@ -27,8 +27,10 @@ namespace FlexibleArray;
 [CustomMarshaller(typeof(FlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.WritableSpanMarshaller))]
 [CustomMarshaller(typeof(ReadOnlyFlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
 [CustomMarshaller(typeof(ReadOnlyFlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.ReadOnlySpanMarshaller))]
-[CustomMarshaller(typeof(FlexibleArrayMemory<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.MemoryMarshaller))]
-[CustomMarshaller(typeof(ReadOnlyFlexibleArrayMemory<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.MemoryMarshaller))]
+[CustomMarshaller(typeof(FlexibleArray<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.ClassMarshaller))]
+[CustomMarshaller(typeof(FlexibleArray<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayOwnedMarshaller<,>))]
+[CustomMarshaller(typeof(ReadOnlyFlexibleArray<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.ClassMarshaller))]
+[CustomMarshaller(typeof(ReadOnlyFlexibleArray<,>), MarshalMode.ManagedToUnmanagedOut, typeof(ReadOnlyFlexibleArrayOwnedMarshaller<,>))]
 public static unsafe class FlexibleArrayMarshaller<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
@@ -81,45 +83,35 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
     }
 
     /// <summary>
-    /// Stateful marshaller that pins either Memory-backed object kind for the duration of a
+    /// Stateful marshaller that pins either flexible array object kind for the duration of a
     /// call: one instance serves the writable or read-only shape through FromManaged
-    /// overloads and shares the pin state.
+    /// overloads and shares the pin state. Adopted native objects pin as a no-op handle.
     /// </summary>
-    public struct MemoryMarshaller
+    public struct ClassMarshaller
     {
         private MemoryHandle _handle;
         private THeader* _pointer;
 
         /// <summary>Pins the writable object's backing storage.</summary>
-        /// <exception cref="InvalidOperationException">
-        /// The object is default-constructed and has no backing storage.
-        /// </exception>
+        /// <exception cref="ArgumentNullException"><paramref name="array"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
         /// <remarks>Calling this method twice without an intervening Free leaks the first pin;
         /// the source generator invokes each instance exactly once.</remarks>
-        public void FromManaged(FlexibleArrayMemory<THeader, T> managed)
+        public void FromManaged(FlexibleArray<THeader, T> array)
         {
-            if (managed.Buffer.IsEmpty)
-            {
-                throw new InvalidOperationException("A default-constructed FlexibleArrayMemory has no backing storage.");
-            }
-
-            Pin(managed.Buffer);
+            ArgumentNullException.ThrowIfNull(array);
+            _handle = array.Pin();
+            _pointer = (THeader*)_handle.Pointer;
         }
 
         /// <summary>Pins the read-only object's backing storage.</summary>
-        /// <exception cref="InvalidOperationException">
-        /// The object is default-constructed and has no backing storage.
-        /// </exception>
-        /// <remarks>Calling this method twice without an intervening Free leaks the first pin;
-        /// the source generator invokes each instance exactly once.</remarks>
-        public void FromManaged(ReadOnlyFlexibleArrayMemory<THeader, T> managed)
+        /// <exception cref="ArgumentNullException"><paramref name="array"/> is null.</exception>
+        /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+        public void FromManaged(ReadOnlyFlexibleArray<THeader, T> array)
         {
-            if (managed.Buffer.IsEmpty)
-            {
-                throw new InvalidOperationException("A default-constructed ReadOnlyFlexibleArrayMemory has no backing storage.");
-            }
-
-            Pin(managed.Buffer);
+            ArgumentNullException.ThrowIfNull(array);
+            _handle = array.Pin();
+            _pointer = (THeader*)_handle.Pointer;
         }
 
         /// <summary>Returns the pinned pointer passed to native code.</summary>
@@ -127,11 +119,5 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
 
         /// <summary>Releases the pin.</summary>
         public void Free() => _handle.Dispose();
-
-        private void Pin(ReadOnlyMemory<byte> buffer)
-        {
-            _handle = buffer.Pin();
-            _pointer = (THeader*)_handle.Pointer;
-        }
     }
 }
