@@ -61,12 +61,10 @@ internal static partial class Advapi32
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
     internal static unsafe partial void* FreeSid(void* sid);
 
-    // The OS's own view of the tail: GetSidSubAuthority(pSid, 0) must be the placeholder.
+    // The OS's own view of the tail: GetSidSubAuthority(pSid, i) is the address of
+    // SubAuthority[i].
     [LibraryImport("advapi32", EntryPoint = "GetSidSubAuthority")]
     internal static unsafe partial uint* GetSidSubAuthority(void* sid, int index);
-
-    [LibraryImport("advapi32", EntryPoint = "GetSidLengthSid")]
-    internal static unsafe partial uint GetSidLengthSid(void* sid);
 
     // Experiment: AllocateAndInitializeSid hands the PSID through an out parameter (the
     // return value is BOOL). If the generator supports custom marshallers on out-parameter
@@ -116,11 +114,12 @@ public sealed unsafe class SidInteropTests
                 using MemoryHandle pinned = adopted!.Pin();
                 byte* sid = (byte*)pinned.Pointer;
 
-                // The OS agrees with our geometry: its tail pointer equals header + our
-                // offset, the count field drives the length, and the total size matches.
+                // The OS agrees with our geometry: the tail starts at header + our offset,
+                // the count field drives the length, and the last element lands where the
+                // stride says (the total size follows from the same address arithmetic).
                 Assert.Equal((nint)Advapi32.GetSidSubAuthority(sid, 0), (nint)(sid + Sid.SubAuthorityOffset));
                 Assert.Equal(2, adopted.Length);
-                Assert.Equal(8 + 2 * sizeof(uint), (int)Advapi32.GetSidLengthSid(sid));
+                Assert.Equal((nint)Advapi32.GetSidSubAuthority(sid, 1), (nint)(sid + Sid.SubAuthorityOffset + sizeof(uint)));
                 Assert.Equal(11u, adopted.Span.Elements[0]);
                 Assert.Equal(22u, adopted.Span.Elements[1]);
             }
