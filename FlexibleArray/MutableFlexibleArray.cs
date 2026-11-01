@@ -153,8 +153,8 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : FlexibleArray<THea
         }
     }
 
-    // Builds the complete object at the start of an already-validated buffer through the
-    // span constructor: it owns the stamp-or-validate rule and the count verification.
+    // Builds the complete object at the start of the buffer through the span constructor,
+    // which owns the buffer check, the stamp-or-validate rule, and the count verification.
     private static MutableFlexibleArray<THeader, T> Build(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
     {
         _ = MutableFlexibleSpan<THeader, T>.Create(buffer.Span, header, elements);

@@ -23,7 +23,7 @@ public interface IFlexibleArrayHeader<TSelf, T>
     where T : unmanaged
 {
     /// <summary>Returns a reference to the first-element placeholder field of the given header.</summary>
-    static abstract ref T GetFirstElement(ref TSelf header);
+    protected internal static abstract ref T GetFirstElement(ref TSelf header);
 
     /// <summary>
     /// Returns the logical number of tail elements of the complete object whose header is given.
@@ -36,5 +36,5 @@ public interface IFlexibleArrayHeader<TSelf, T>
     /// mutated, and the library performs no bounds checking on the result: interop declarations
     /// are trusted, matching P/Invoke semantics.
     /// </remarks>
-    static abstract int GetTailElementCount(scoped in TSelf header);
+    protected internal static abstract int GetTailElementCount(scoped in TSelf header);
 }
