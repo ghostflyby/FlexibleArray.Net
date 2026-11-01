@@ -17,5 +17,5 @@ public interface ITransferableFlexibleArrayHeader<TSelf, T>
 {
     /// <summary>Releases the complete object whose header is at the given location.</summary>
     /// <remarks>The storage is invalid after this call returns.</remarks>
-    static abstract void Release(scoped ref TSelf header);
+    protected internal static abstract void Release(scoped ref TSelf header);
 }
