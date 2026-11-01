@@ -156,6 +156,39 @@ public struct Vector128Header : IFlexibleArrayHeader<Vector128Header, byte>
     public static int GetTailLength(scoped in Vector128Header header) => header.Count;
 }
 
+/// <summary>
+/// A byte-tail header whose objects are malloc'd C strings: same layout as
+/// <see cref="CStrHeader"/>, but the lifetime is a transfer released with free.
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct MallocCStringHeader
+    : IFlexibleArrayHeader<MallocCStringHeader, byte>, ITransferableFlexibleArrayHeader<MallocCStringHeader, byte>
+{
+    public byte FirstElement;
+
+    public static ref byte GetFirstElement(ref MallocCStringHeader header) => ref header.FirstElement;
+
+    // strlen over the byte tail; termination is guaranteed by the producer.
+    public static int GetTailLength(scoped in MallocCStringHeader header)
+    {
+        ref MallocCStringHeader h = ref Unsafe.AsRef(in header);
+        ref byte first = ref MallocCStringHeader.GetFirstElement(ref h);
+        int length = 0;
+        while (Unsafe.Add(ref first, length) != 0)
+        {
+            length++;
+        }
+
+        return length;
+    }
+
+    public static unsafe void Release(scoped ref MallocCStringHeader header)
+    {
+        ref MallocCStringHeader h = ref Unsafe.AsRef(in header);
+        NativeStdLib.Free((void*)Unsafe.AsPointer(ref h));
+    }
+}
+
 /// <summary>A minimal byte-tail header: the whole object is a NUL-terminated byte string.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct CStrHeader : IFlexibleArrayHeader<CStrHeader, byte>

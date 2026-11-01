@@ -4,15 +4,14 @@ namespace FlexibleArray;
 
 /// <summary>
 /// Pool-based construction for flexible array objects: rents storage for the complete object
-/// and hands the rental contract back to the caller.
+/// and returns a single writable object whose disposal returns the rental to the pool.
 /// </summary>
 public static class MemoryPoolExtensions
 {
     /// <summary>
-    /// Rents storage for the complete object from the pool, builds it (header first, then the
-    /// tail), and returns the rental, which the caller must return to the pool via
-    /// <see cref="IDisposable.Dispose"/> — the view comes along through
-    /// <paramref name="view"/>. Pools guarantee no particular alignment; the shared pool's
+    /// Rents storage for the complete object from the pool and builds it (header first, then
+    /// the tail). Disposing the returned object returns the rental — or the finalizer does,
+    /// as a leak safety net. Pools guarantee no particular alignment; the shared pool's
     /// arrays happen to be aligned to at least pointer size, and headers requiring stronger
     /// alignment should use the managed construction or an allocator that guarantees it.
     /// </summary>
@@ -20,29 +19,26 @@ public static class MemoryPoolExtensions
     /// <exception cref="ArgumentException">
     /// The header-declared tail length does not match the number of elements.
     /// </exception>
-    public static IMemoryOwner<byte> Create<THeader, T>(
+    public static FlexibleArray<THeader, T> Create<THeader, T>(
         this MemoryPool<byte> pool,
         in THeader header,
-        ReadOnlySpan<T> elements,
-        out FlexibleArrayMemory<THeader, T> view)
+        ReadOnlySpan<T> elements)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
         ArgumentNullException.ThrowIfNull(pool);
         int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
 
-        IMemoryOwner<byte> owner = pool.Rent(byteLength);
+        IMemoryOwner<byte> rental = pool.Rent(byteLength);
         try
         {
-            view = FlexibleArrayMemory<THeader, T>.Create(owner.Memory, header, elements);
+            return FlexibleArray<THeader, T>.Create(rental.Memory, header, elements).WithOwner(rental);
         }
         catch
         {
-            // The out argument never reaches the caller on throw, so return the rental here.
-            owner.Dispose();
+            // Nothing escapes on throw, so return the rental here.
+            rental.Dispose();
             throw;
         }
-
-        return owner;
     }
 }
