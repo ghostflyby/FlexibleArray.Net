@@ -23,7 +23,7 @@ public struct SidHeader
     public static ref uint GetFirstElement(ref SidHeader header) => ref header.FirstElement;
 
     // The count field IS the tail length.
-    public static int GetTailLength(scoped in SidHeader header) => header.SubAuthorityCount;
+    public static int GetTailElementCount(scoped in SidHeader header) => header.SubAuthorityCount;
 
     public static unsafe void Release(scoped ref SidHeader header)
     {
@@ -67,7 +67,7 @@ internal static partial class DeclarativeSid
         uint subAuthority5,
         uint subAuthority6,
         uint subAuthority7,
-        out FlexibleArray<SidHeader, uint>? sid);
+        out MutableFlexibleArray<SidHeader, uint>? sid);
 
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
     internal static partial nint FreeSid(nint sid);

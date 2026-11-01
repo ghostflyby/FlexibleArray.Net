@@ -12,13 +12,13 @@ public static class FlexibleArrayTransfer
     /// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}.Release"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="pointer"/> is null.</exception>
-    public static unsafe FlexibleArray<THeader, T> Adopt<THeader, T>(THeader* pointer)
+    public static unsafe MutableFlexibleArray<THeader, T> Adopt<THeader, T>(THeader* pointer)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, ITransferableFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
         ArgumentNullException.ThrowIfNull(pointer);
-        var length = THeader.GetTailLength(in *pointer);
-        return new FlexibleArray<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length);
+        var length = THeader.GetTailElementCount(in *pointer);
+        return new MutableFlexibleArray<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length);
     }
 
     /// <summary>
@@ -27,13 +27,13 @@ public static class FlexibleArrayTransfer
     /// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}.Release"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="pointer"/> is null.</exception>
-    public static unsafe ReadOnlyFlexibleArray<THeader, T> AdoptReadOnly<THeader, T>(THeader* pointer)
+    public static unsafe FlexibleArray<THeader, T> AdoptReadOnly<THeader, T>(THeader* pointer)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, ITransferableFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
         ArgumentNullException.ThrowIfNull(pointer);
-        var length = THeader.GetTailLength(in *pointer);
-        return new ReadOnlyFlexibleArray<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length);
+        var length = THeader.GetTailElementCount(in *pointer);
+        return new FlexibleArray<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length);
     }
 
     // Non-generic method in a generic type: function pointers cannot target generic methods,

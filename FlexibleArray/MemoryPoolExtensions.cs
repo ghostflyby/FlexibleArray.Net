@@ -19,7 +19,7 @@ public static class MemoryPoolExtensions
     /// <exception cref="ArgumentException">
     /// The header-declared tail length does not match the number of elements.
     /// </exception>
-    public static FlexibleArray<THeader, T> Create<THeader, T>(
+    public static MutableFlexibleArray<THeader, T> Create<THeader, T>(
         this MemoryPool<byte> pool,
         in THeader header,
         ReadOnlySpan<T> elements)
@@ -32,7 +32,7 @@ public static class MemoryPoolExtensions
         var rental = pool.Rent(byteLength);
         try
         {
-            return FlexibleArray<THeader, T>.Create(rental.Memory, header, elements).WithOwner(rental);
+            return MutableFlexibleArray<THeader, T>.Create(rental.Memory, header, elements).WithOwner(rental);
         }
         catch
         {

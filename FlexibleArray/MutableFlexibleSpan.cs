@@ -14,7 +14,7 @@ namespace FlexibleArray;
 /// region overlapped by the tail. Initialize by writing the header first, then the tail.
 /// </remarks>
 [NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
-public readonly ref struct FlexibleArraySpan<THeader, T>
+public readonly ref struct MutableFlexibleSpan<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
@@ -26,13 +26,13 @@ public readonly ref struct FlexibleArraySpan<THeader, T>
     /// the header contract and is not validated — the declaration guarantees the object is
     /// valid at this location, matching P/Invoke trust semantics.
     /// </summary>
-    public FlexibleArraySpan(ref THeader header)
+    public MutableFlexibleSpan(ref THeader header)
     {
         _header = ref header;
-        _length = THeader.GetTailLength(in header);
+        _length = THeader.GetTailElementCount(in header);
     }
 
-    internal FlexibleArraySpan(ref THeader header, int length)
+    internal MutableFlexibleSpan(ref THeader header, int length)
     {
         _header = ref header;
         _length = length;
@@ -53,7 +53,7 @@ public readonly ref struct FlexibleArraySpan<THeader, T>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
     /// <exception cref="ArgumentException">The buffer is too short.</exception>
-    public static FlexibleArraySpan<THeader, T> Create(Span<byte> buffer, int length)
+    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
@@ -63,10 +63,10 @@ public readonly ref struct FlexibleArraySpan<THeader, T>
         }
 
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
-        return new FlexibleArraySpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
+        return new MutableFlexibleSpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
     }
 
     /// <summary>Converts to a read-only view whose read-onlyness covers both the header and the tail.</summary>
-    public static implicit operator ReadOnlyFlexibleArraySpan<THeader, T>(FlexibleArraySpan<THeader, T> span)
+    public static implicit operator FlexibleSpan<THeader, T>(MutableFlexibleSpan<THeader, T> span)
         => new(ref span._header, span._length);
 }

@@ -23,14 +23,14 @@ namespace FlexibleArray;
 /// instead of marshalling to a silent NULL pointer. Runtime-based DllImport ignores custom
 /// marshallers; this only applies to [LibraryImport] source generation.
 /// </remarks>
-[CustomMarshaller(typeof(FlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
-[CustomMarshaller(typeof(FlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.WritableSpanMarshaller))]
-[CustomMarshaller(typeof(ReadOnlyFlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
-[CustomMarshaller(typeof(ReadOnlyFlexibleArraySpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.ReadOnlySpanMarshaller))]
+[CustomMarshaller(typeof(MutableFlexibleSpan<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
+[CustomMarshaller(typeof(MutableFlexibleSpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.WritableSpanMarshaller))]
+[CustomMarshaller(typeof(FlexibleSpan<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
+[CustomMarshaller(typeof(FlexibleSpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.ReadOnlySpanMarshaller))]
+[CustomMarshaller(typeof(MutableFlexibleArray<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.ClassMarshaller))]
+[CustomMarshaller(typeof(MutableFlexibleArray<,>), MarshalMode.ManagedToUnmanagedOut, typeof(MutableFlexibleArrayOwnedMarshaller<,>))]
 [CustomMarshaller(typeof(FlexibleArray<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.ClassMarshaller))]
 [CustomMarshaller(typeof(FlexibleArray<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayOwnedMarshaller<,>))]
-[CustomMarshaller(typeof(ReadOnlyFlexibleArray<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>.ClassMarshaller))]
-[CustomMarshaller(typeof(ReadOnlyFlexibleArray<,>), MarshalMode.ManagedToUnmanagedOut, typeof(ReadOnlyFlexibleArrayOwnedMarshaller<,>))]
 public static unsafe class FlexibleArrayMarshaller<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
@@ -39,12 +39,12 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
     /// <exception cref="InvalidOperationException">
     /// The view is default-constructed and has no backing storage.
     /// </exception>
-    public static THeader* ConvertToUnmanaged(FlexibleArraySpan<THeader, T> span)
+    public static THeader* ConvertToUnmanaged(MutableFlexibleSpan<THeader, T> span)
     {
         ref var header = ref span.Header;
         if (Unsafe.IsNullRef(in header))
         {
-            throw new InvalidOperationException("A default-constructed FlexibleArraySpan has no backing storage.");
+            throw new InvalidOperationException("A default-constructed MutableFlexibleSpan has no backing storage.");
         }
 
         return (THeader*)Unsafe.AsPointer(ref header);
@@ -54,12 +54,12 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
     /// <exception cref="InvalidOperationException">
     /// The view is default-constructed and has no backing storage.
     /// </exception>
-    public static THeader* ConvertToUnmanaged(ReadOnlyFlexibleArraySpan<THeader, T> span)
+    public static THeader* ConvertToUnmanaged(FlexibleSpan<THeader, T> span)
     {
         ref readonly var reference = ref span.Header;
         if (Unsafe.IsNullRef(in reference))
         {
-            throw new InvalidOperationException("A default-constructed ReadOnlyFlexibleArraySpan has no backing storage.");
+            throw new InvalidOperationException("A default-constructed FlexibleSpan has no backing storage.");
         }
 
         return (THeader*)Unsafe.AsPointer(in reference);
@@ -69,16 +69,16 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
     public static class WritableSpanMarshaller
     {
         /// <summary>Converts a returned pointer into a writable view anchored at that location.</summary>
-        public static FlexibleArraySpan<THeader, T> ConvertToManaged(THeader* pointer)
-            => pointer is null ? default : new FlexibleArraySpan<THeader, T>(ref Unsafe.AsRef<THeader>(pointer));
+        public static MutableFlexibleSpan<THeader, T> ConvertToManaged(THeader* pointer)
+            => pointer is null ? default : new MutableFlexibleSpan<THeader, T>(ref Unsafe.AsRef<THeader>(pointer));
     }
 
     /// <summary>Receives read-only span views from returned native pointers.</summary>
     public static class ReadOnlySpanMarshaller
     {
         /// <summary>Converts a returned pointer into a read-only view anchored at that location.</summary>
-        public static ReadOnlyFlexibleArraySpan<THeader, T> ConvertToManaged(THeader* pointer)
-            => pointer is null ? default : new ReadOnlyFlexibleArraySpan<THeader, T>(in *pointer);
+        public static FlexibleSpan<THeader, T> ConvertToManaged(THeader* pointer)
+            => pointer is null ? default : new FlexibleSpan<THeader, T>(in *pointer);
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
         /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
         /// <remarks>Calling this method twice without an intervening Free leaks the first pin;
         /// the source generator invokes each instance exactly once.</remarks>
-        public void FromManaged(FlexibleArray<THeader, T> array)
+        public void FromManaged(MutableFlexibleArray<THeader, T> array)
         {
             ArgumentNullException.ThrowIfNull(array);
             _handle = array.Pin();
@@ -106,7 +106,7 @@ public static unsafe class FlexibleArrayMarshaller<THeader, T>
         /// <summary>Pins the read-only object's backing storage.</summary>
         /// <exception cref="ArgumentNullException"><paramref name="array"/> is null.</exception>
         /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-        public void FromManaged(ReadOnlyFlexibleArray<THeader, T> array)
+        public void FromManaged(FlexibleArray<THeader, T> array)
         {
             ArgumentNullException.ThrowIfNull(array);
             _handle = array.Pin();

@@ -1,13 +1,13 @@
 namespace FlexibleArray.Tests;
 
 /// <summary>Verifies the ref-returning interface member, header/tail aliasing, and the overlap behavior of whole-header writes.</summary>
-public sealed class FlexibleArraySpanTests
+public sealed class MutableFlexibleSpanTests
 {
     [Fact]
     public void Elements_AliasHeaderPlaceholderField()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 3);
 
         // The interface-returned field reference and the first element are the same memory: aliasing in both directions.
         view.Elements[0] = 42;
@@ -23,24 +23,24 @@ public sealed class FlexibleArraySpanTests
     public void ReadOnlyView_ExposesSameData()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 3);
         view.Header = new PacketHeader { Count = 3, Timestamp = 12345, FirstElement = 1 };
         view.Elements[1] = 2;
         view.Elements[2] = 3;
 
-        ReadOnlyFlexibleArraySpan<PacketHeader, int> readOnly = view;
+        FlexibleSpan<PacketHeader, int> readOnly = view;
         Assert.Equal(3, readOnly.Length);
         Assert.Equal(3, readOnly.Header.Count);
         Assert.Equal(12345, readOnly.Header.Timestamp);
         Assert.Equal(new[] { 1, 2, 3 }, readOnly.Elements.ToArray());
-        Assert.True(ReadOnlyFlexibleArraySpan<PacketHeader, int>.Create(buffer, 3).Elements.SequenceEqual(readOnly.Elements));
+        Assert.True(FlexibleSpan<PacketHeader, int>.Create(buffer, 3).Elements.SequenceEqual(readOnly.Elements));
     }
 
     [Fact]
     public void ZeroLength_KeepsFullHeaderAndEmptyElements()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(0)];
-        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 0);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 0);
 
         view.Header = new PacketHeader { Count = 0, Timestamp = 12345, FirstElement = -1 };
         Assert.Equal(0, view.Length);
@@ -56,7 +56,7 @@ public sealed class FlexibleArraySpanTests
         // PacketHeader: sizeof(THeader)=24, offset=16, element size=4. The header covers
         // [0,24), overlapping e0 ([16,20)) and e1 ([20,24)).
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
         view.Elements[0] = 10;
         view.Elements[1] = 20;
 
@@ -77,12 +77,12 @@ public sealed class FlexibleArraySpanTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
             Span<byte> buffer = new byte[32];
-            _ = FlexibleArraySpan<PacketHeader, int>.Create(buffer, -1);
+            _ = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, -1);
         });
         Assert.Throws<ArgumentException>(() =>
         {
             Span<byte> buffer = new byte[16];
-            _ = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 3);
+            _ = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 3);
         });
     }
 }
