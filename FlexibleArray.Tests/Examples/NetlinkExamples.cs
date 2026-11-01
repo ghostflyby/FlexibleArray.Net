@@ -220,9 +220,8 @@ internal static partial class DeclarativeNetlink
 }
 
 /// <summary>
-/// The same flow the way it looks without the library: array buffers the marshaller pins
-/// automatically, nint for the addresses the call does not need, the request assembled field
-/// by field with endian writes, and the walk done with hand-computed offsets.
+/// The same flow the way it looks without the library: span buffers, the request assembled
+/// field by field with endian writes, and the walk done with hand-computed offsets.
 /// </summary>
 internal static partial class RawNetlinkPInvoke
 {
@@ -233,10 +232,10 @@ internal static partial class RawNetlinkPInvoke
     private static partial int Bind(int fd, in SockAddrNl addr, uint len);
 
     [LibraryImport("libc", EntryPoint = "sendto", SetLastError = true)]
-    private static partial long SendTo(int fd, byte[] buf, nuint len, int flags, in SockAddrNl dst, uint dstLen);
+    private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, int flags, in SockAddrNl dst, uint dstLen);
 
     [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
-    private static partial long RecvFrom(int fd, byte[] buf, nuint len, int flags, nint src, nint srcLen);
+    private static partial long RecvFrom(int fd, Span<byte> buf, int flags);
 
     [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     private static partial int Close(int fd);
@@ -266,21 +265,21 @@ internal static partial class RawNetlinkPInvoke
                 throw new InvalidOperationException($"bind() failed with errno {Marshal.GetLastWin32Error()}");
             }
 
-            byte[] request = new byte[32];
+            Span<byte> request = new byte[32];
             BuildDumpRequest(request);
             SockAddrNl kernel = new() { Family = Netlink.AF_NETLINK };
-            long sent = SendTo(fd, request, (nuint)request.Length, 0, kernel, Netlink.ADDR_LEN);
+            long sent = SendTo(fd, request, 0, kernel, Netlink.ADDR_LEN);
             if (sent != request.Length)
             {
                 throw new InvalidOperationException($"sendto() failed with errno {Marshal.GetLastWin32Error()}");
             }
 
             List<string> names = [];
-            byte[] response = new byte[65536];
+            Span<byte> response = new byte[65536];
             bool finished = false;
             for (int round = 0; round < 16 && !finished; round++)
             {
-                long received = RecvFrom(fd, response, (nuint)response.Length, 0, 0, 0);
+                long received = RecvFrom(fd, response, 0);
                 if (received <= 0)
                 {
                     throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
@@ -394,11 +393,11 @@ public sealed class NetlinkExamples
         done.Header = new NlmsgHeader { Len = 20, Type = Netlink.NLMSG_DONE, Seq = 1 };
 
         // Both request builders produce byte-identical datagrams.
-        byte[] declaredRequest = new byte[32];
-        byte[] rawRequest = new byte[32];
+        Span<byte> declaredRequest = new byte[32];
+        Span<byte> rawRequest = new byte[32];
         DeclarativeNetlink.BuildDumpRequest(declaredRequest);
         RawNetlinkPInvoke.BuildDumpRequest(rawRequest);
-        Assert.Equal(declaredRequest, rawRequest);
+        Assert.Equal((ReadOnlySpan<byte>)declaredRequest, rawRequest);
 
         (List<string> declared, bool declaredFinished, List<int> declaredErrors) = DeclarativeNetlink.WalkLinkNames(datagram);
         (List<string> raw, bool rawFinished, List<int> rawErrors) = RawNetlinkPInvoke.WalkLinkNames(datagram);
