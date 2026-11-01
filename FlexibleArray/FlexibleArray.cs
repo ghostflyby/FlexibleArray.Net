@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
@@ -75,7 +74,7 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
     public static FlexibleArray<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
     {
         int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
-        nuint alignment = ComputeAlignment();
+        nuint alignment = FlexibleArrayLayout<THeader, T>.RequiredAlignment;
         void* pointer = NativeMemory.AlignedAlloc((nuint)byteLength, alignment);
         NativeMemoryManager manager = new(pointer, byteLength);
 
@@ -98,14 +97,4 @@ public sealed unsafe class FlexibleArray<THeader, T> : IDisposable
 
     /// <inheritdoc />
     public void Dispose() => _manager.Dispose();
-
-    // Alignment requirements cannot be queried at runtime; allocate conservatively at the
-    // smallest power of two not less than max(sizeof(THeader), sizeof(T)), with a floor of 8.
-    // No field of the header can require more alignment than that, and the elements sit at
-    // legal field offsets within the header, so they are aligned as well.
-    private static nuint ComputeAlignment()
-    {
-        int maxSize = Math.Max(Unsafe.SizeOf<THeader>(), Unsafe.SizeOf<T>());
-        return Math.Max(8, BitOperations.RoundUpToPowerOf2((uint)maxSize));
-    }
 }

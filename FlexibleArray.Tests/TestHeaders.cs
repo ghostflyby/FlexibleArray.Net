@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace FlexibleArray.Tests;
 
@@ -141,6 +142,18 @@ public struct SentinelHeader : IFlexibleArrayHeader<SentinelHeader, int>
 
         return length;
     }
+}
+
+/// <summary>A header whose Vector128 field forces 16-byte field alignment.</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct Vector128Header : IFlexibleArrayHeader<Vector128Header, byte>
+{
+    public int Count;
+    public Vector128<byte> Padding;
+    public byte FirstElement;
+
+    public static ref byte GetFirstElement(ref Vector128Header header) => ref header.FirstElement;
+    public static int GetTailLength(scoped in Vector128Header header) => header.Count;
 }
 
 /// <summary>A minimal byte-tail header: the whole object is a NUL-terminated byte string.</summary>

@@ -11,6 +11,8 @@ FlexibleArray.FlexibleArrayMemory<THeader, T>.FlexibleArrayMemory() -> void
 FlexibleArray.FlexibleArrayMemory<THeader, T>.Length.get -> int
 FlexibleArray.FlexibleArrayMemory<THeader, T>.Span.get -> FlexibleArray.FlexibleArraySpan<THeader, T>
 static FlexibleArray.FlexibleArrayMemory<THeader, T>.Create(System.Memory<byte> buffer, int length) -> FlexibleArray.FlexibleArrayMemory<THeader, T>
+static FlexibleArray.FlexibleArrayMemory<THeader, T>.Create(in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.FlexibleArrayMemory<THeader, T>
+static FlexibleArray.FlexibleArrayMemory<THeader, T>.Create(System.Func<int, System.Memory<byte>>! allocator, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.FlexibleArrayMemory<THeader, T>
 static FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>.Create(System.ReadOnlyMemory<byte> buffer, int length) -> FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>
 static FlexibleArray.FlexibleArrayMemory<THeader, T>.implicit operator FlexibleArray.FlexibleArraySpan<THeader, T>(FlexibleArray.FlexibleArrayMemory<THeader, T> memory) -> FlexibleArray.FlexibleArraySpan<THeader, T>
 static FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>.implicit operator FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>(FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T> memory) -> FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>
@@ -39,6 +41,7 @@ static FlexibleArray.FlexibleArrayLayout<THeader, T>.ElementSize.get -> int
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.FirstElementOffset.get -> nint
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.GetRequiredBytes(int length) -> int
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.HeaderSize.get -> int
+static FlexibleArray.FlexibleArrayLayout<THeader, T>.RequiredAlignment.get -> nuint
 static FlexibleArray.FlexibleArrayMemory<THeader, T>.implicit operator FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>(FlexibleArray.FlexibleArrayMemory<THeader, T> memory) -> FlexibleArray.ReadOnlyFlexibleArrayMemory<THeader, T>
 static FlexibleArray.FlexibleArraySpan<THeader, T>.Create(System.Span<byte> buffer, int length) -> FlexibleArray.FlexibleArraySpan<THeader, T>
 static FlexibleArray.FlexibleArraySpan<THeader, T>.implicit operator FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>(FlexibleArray.FlexibleArraySpan<THeader, T> span) -> FlexibleArray.ReadOnlyFlexibleArraySpan<THeader, T>
