@@ -85,7 +85,9 @@ internal static partial class DeclarativeNetlink
     private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, nuint len, int flags, in SockAddrNl dst, uint dstLen);
 
     [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
-    private static partial long RecvFrom(int fd, Span<byte> buf, nuint len, int flags);
+    // Every native slot must have a managed argument: the unused source-address out
+    // parameters stay in the signature as explicit NULL (0), or the kernel reads garbage.
+    private static partial long RecvFrom(int fd, Span<byte> buf, nuint len, int flags, nint src, nint srcLen);
 
     [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     private static partial int Close(int fd);
@@ -133,7 +135,7 @@ internal static partial class DeclarativeNetlink
             bool finished = false;
             for (int round = 0; round < 16 && !finished; round++)
             {
-                long received = RecvFrom(fd, response, (nuint)response.Length, 0);
+                long received = RecvFrom(fd, response, (nuint)response.Length, 0, 0, 0);
                 if (received <= 0)
                 {
                     throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
@@ -239,7 +241,9 @@ internal static partial class RawNetlinkPInvoke
     private static partial long SendTo(int fd, ReadOnlySpan<byte> buf, nuint len, int flags, in SockAddrNl dst, uint dstLen);
 
     [LibraryImport("libc", EntryPoint = "recvfrom", SetLastError = true)]
-    private static partial long RecvFrom(int fd, Span<byte> buf, nuint len, int flags);
+    // Every native slot must have a managed argument: the unused source-address out
+    // parameters stay in the signature as explicit NULL (0), or the kernel reads garbage.
+    private static partial long RecvFrom(int fd, Span<byte> buf, nuint len, int flags, nint src, nint srcLen);
 
     [LibraryImport("libc", EntryPoint = "close", SetLastError = true)]
     private static partial int Close(int fd);
@@ -283,7 +287,7 @@ internal static partial class RawNetlinkPInvoke
             bool finished = false;
             for (int round = 0; round < 16 && !finished; round++)
             {
-                long received = RecvFrom(fd, response, (nuint)response.Length, 0);
+                long received = RecvFrom(fd, response, (nuint)response.Length, 0, 0, 0);
                 if (received <= 0)
                 {
                     throw new InvalidOperationException($"recvfrom() failed with errno {Marshal.GetLastWin32Error()}");
