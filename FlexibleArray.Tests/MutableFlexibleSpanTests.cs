@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace FlexibleArray.Tests;
 
 /// <summary>Verifies the ref-returning interface member, header/tail aliasing, and the overlap behavior of whole-header writes.</summary>
@@ -136,6 +138,145 @@ public sealed class MutableFlexibleSpanTests
         {
             Span<byte> small = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(1)];
             MutableFlexibleSpan<DoubleTagOriginal, int>.Create(small, new DoubleTagOriginal(), [1]);
+        });
+    }
+
+    [Fact]
+    public void Capacity_IsDerivedFromTheBuffer()
+    {
+        // A buffer larger than the required byte count contributes its surplus as capacity.
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2) + 4 * sizeof(int)];
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
+        Assert.Equal(2, view.Length);
+        Assert.Equal(6, view.Capacity);
+        Assert.Equal(4, view.FreeElements.Length);
+
+        // Anchored views know no storage extent: capacity collapses to the declared length.
+        ref var headerRef = ref Unsafe.As<byte, PacketHeader>(ref buffer[0]);
+        var anchored = new MutableFlexibleSpan<PacketHeader, int>(ref headerRef);
+        Assert.Equal(anchored.Length, anchored.Capacity);
+    }
+
+    [Fact]
+    public void Create_EmptyStart_StampsZeroAndDerivesCapacity()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 99, Timestamp = 7 });
+
+        Assert.Equal(0, view.Length);
+        Assert.Equal(0, view.Header.Count);
+        Assert.Equal(7, view.Header.Timestamp);
+        Assert.Equal(3, view.Capacity);
+        Assert.True(view.FreeElements.Length == 3);
+    }
+
+    [Fact]
+    public void Append_GrowsAndStampsTheHeader()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 });
+
+        view.Append(1);
+        view.AppendRange([2, 3]);
+
+        Assert.Equal(3, view.Length);
+        Assert.Equal(3, view.Header.Count);
+        Assert.Equal(new[] { 1, 2, 3 }, view.Elements.ToArray());
+        Assert.Equal(3, ((FlexibleSpan<PacketHeader, int>)view).Header.Count);
+    }
+
+    [Fact]
+    public void Advance_CommitsInPlaceWrites()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 });
+
+        // Write through the free region as if building a nested object, then commit.
+        view.FreeElements[0] = 5;
+        view.FreeElements[1] = 6;
+        view.Advance(2);
+
+        Assert.Equal(2, view.Length);
+        Assert.Equal(2, view.Header.Count);
+        Assert.Equal(new[] { 5, 6 }, view.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Truncate_ShrinksLogically_AndReappendOverwrites()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 });
+        view.AppendRange([1, 2, 3]);
+
+        view.Truncate(1);
+
+        Assert.Equal(1, view.Length);
+        Assert.Equal(1, view.Header.Count);
+        Assert.Equal(new[] { 1 }, view.Elements.ToArray());
+        Assert.Equal(3, view.Capacity);
+
+        // The removed bytes are overwritten in place by later appends.
+        view.AppendRange([9, 8]);
+        Assert.Equal(new[] { 1, 9, 8 }, view.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Mutations_AreBoundedByCapacity()
+    {
+        // Ref-struct views cannot be captured in lambdas, so each check rebuilds the object
+        // inside. A 24-byte buffer holds exactly two committed elements: the 24-byte header
+        // overlaps both slots, so the derived capacity equals the committed length.
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Append(3);
+        });
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).AppendRange([3]);
+        });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Advance(1);
+        });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Advance(-1);
+        });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Truncate(-1);
+        });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Truncate(3);
+        });
+    }
+
+    [Fact]
+    public void Mutations_RequireAWriteBack()
+    {
+        // Reading a header without a write-back is fine; changing its length is not. The raw
+        // form keeps a committed length of 1 with capacity to spare, past the bounds checks.
+        Assert.Throws<NotSupportedException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(buffer, 1).Append(1);
+        });
+        Assert.Throws<NotSupportedException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(buffer, 1).Advance(1);
+        });
+        Assert.Throws<NotSupportedException>(() =>
+        {
+            Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(2)];
+            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(buffer, 1).Truncate(0);
         });
     }
 }

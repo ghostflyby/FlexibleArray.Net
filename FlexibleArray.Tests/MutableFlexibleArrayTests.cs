@@ -161,6 +161,146 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
+    public void Create_WithCapacity_StartsEmpty()
+    {
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+            new PacketHeader { Count = 99, Timestamp = 5 }, capacity: 3);
+
+        Assert.Equal(0, array.Length);
+        Assert.Equal(3, array.Capacity);
+        Assert.Equal(0, array.Header.Count);
+        Assert.Equal(5, array.Header.Timestamp);
+
+        // A surplus buffer contributes its element capacity through the same property.
+        Memory<byte> big = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(1) + sizeof(int)];
+        using var over = MutableFlexibleArray<PacketHeader, int>.Create(big, new PacketHeader(), [1]);
+        Assert.Equal(1, over.Length);
+        Assert.Equal(3, over.Capacity);
+    }
+
+    [Fact]
+    public void Append_GrowsAndStamps_ThroughProjections()
+    {
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(new PacketHeader { Timestamp = 9 }, 3);
+
+        array.Append(1);
+        array.AppendRange([2, 3]);
+
+        Assert.Equal(3, array.Length);
+        Assert.Equal(3, array.Header.Count);
+        Assert.Equal(new[] { 1, 2, 3 }, array.Span.Elements.ToArray());
+        Assert.Throws<InvalidOperationException>(() => array.Append(4));
+    }
+
+    [Fact]
+    public void Truncate_ShrinksLogically_ThroughProjections()
+    {
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+            new PacketHeader { Timestamp = 9 }, [1, 2, 3]);
+
+        array.Truncate(1);
+
+        Assert.Equal(1, array.Length);
+        Assert.Equal(1, array.Header.Count);
+        Assert.Equal(new[] { 1 }, array.Span.Elements.ToArray());
+        Assert.Equal(3, array.Capacity);
+
+        array.AppendRange([7, 8]);
+        Assert.Equal(new[] { 1, 7, 8 }, array.Span.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Mutations_RequireAWriteBack_AndDisposedObjectsRejectThem()
+    {
+        // With room to spare the bounds checks pass, so the mutation reaches the capability
+        // gate and fails there instead.
+        using var noWriteBack = MutableFlexibleArray<DoubleTagOriginal, int>.Create(
+            new DoubleTagOriginal(), capacity: 1);
+        Assert.Throws<NotSupportedException>(() => noWriteBack.Append(1));
+
+        var array = MutableFlexibleArray<PacketHeader, int>.Create(new PacketHeader(), 1);
+        array.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => array.Append(1));
+        Assert.Throws<ObjectDisposedException>(() => array.Truncate(0));
+        Assert.Throws<ObjectDisposedException>(() => { _ = array.FreeElements; });
+    }
+
+    [Fact]
+    public void Length_FollowsStampsThroughProjections()
+    {
+        // Every stamp — including one through a held projection, with no object member
+        // involved — is reported back to the object, so the cached committed length and the
+        // header's length field stay in lockstep.
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+            new PacketHeader { Timestamp = 3 }, [1, 2, 3]);
+
+        Assert.Equal(array.Length, array.Span.Capacity);
+        array.Span.Truncate(1);
+        Assert.Equal(1, array.Length);
+        Assert.Equal(1, array.Header.Count);
+
+        array.Append(7);
+        Assert.Equal(2, array.Length);
+        Assert.Equal(2, array.Header.Count);
+    }
+
+    [Fact]
+    public void SpanSnapshot_KeepsCapturedStateBetweenMutations()
+    {
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+            new PacketHeader { Timestamp = 3 }, [1, 2, 3]);
+        var stale = array.Span;
+
+        array.Truncate(1);
+
+        // The held projection keeps its captured length and capacity; a fresh read sees the
+        // object's current state.
+        Assert.Equal(3, stale.Length);
+        Assert.Equal(3, stale.Capacity);
+        Assert.Equal(1, array.Span.Length);
+        Assert.Equal(1, array.Span.Capacity);
+    }
+
+    [Fact]
+    public void ImplicitConversions_TolerateNull()
+    {
+        FlexibleArray<PacketHeader, int>? nullReadOnly = null;
+        MutableFlexibleArray<PacketHeader, int>? nullWritable = null;
+
+        FlexibleSpan<PacketHeader, int> readOnly = nullReadOnly;
+        MutableFlexibleSpan<PacketHeader, int> writable = nullWritable;
+
+        Assert.Equal(0, readOnly.Length);
+        Assert.Equal(0, writable.Length);
+    }
+
+    [Fact]
+    public void Create_FromPool_ExposesRentalSurplusAsCapacity()
+    {
+        // Pool rentals are rounded up, and the surplus is genuinely usable: appending into
+        // it succeeds without any reallocation.
+        var array = MemoryPool<byte>.Shared.Create(
+            new PacketHeader { Timestamp = 1 }, [1, 2]);
+        try
+        {
+            Assert.True(array.Capacity >= 2);
+            var free = array.Capacity - array.Length;
+            for (var i = 0; i < free; i++)
+            {
+                array.Append(10 + i);
+            }
+
+            Assert.Equal(array.Capacity, array.Length);
+            Assert.Equal(array.Capacity, array.Header.Count);
+            Assert.Throws<InvalidOperationException>(() => array.Append(99));
+        }
+        finally
+        {
+            array.Dispose();
+        }
+    }
+
+    [Fact]
     public void Dispose_OfManagedObject_CollectsWithTheGc()
     {
         var array = MutableFlexibleArray<PacketHeader, int>.Create(

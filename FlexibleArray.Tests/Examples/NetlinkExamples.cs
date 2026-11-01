@@ -30,7 +30,7 @@ internal static class Netlink
 // construction converts an element count into the byte-length field automatically.
 [StructLayout(LayoutKind.Sequential)]
 internal struct NlmsgHeader
-    : IFlexibleArrayHeader<NlmsgHeader, byte>, IConstructibleFlexibleArrayHeader<NlmsgHeader, byte>
+    : IConstructibleFlexibleArrayHeader<NlmsgHeader, byte>
 {
     public uint Len;
     public ushort Type;
@@ -48,7 +48,7 @@ internal struct NlmsgHeader
 
 [StructLayout(LayoutKind.Sequential)]
 internal struct NlattrHeader
-    : IFlexibleArrayHeader<NlattrHeader, byte>, IConstructibleFlexibleArrayHeader<NlattrHeader, byte>
+    : IConstructibleFlexibleArrayHeader<NlattrHeader, byte>
 {
     public ushort Len;
     public ushort Type;
@@ -386,19 +386,24 @@ public sealed class NetlinkExamples
     {
         // One RTM_NEWLINK message: nlmsghdr(16) + ifinfomsg(16) + two IFLA_IFNAME attributes
         // with unaligned lengths (7 and 9), so a walk must apply NLA_ALIGN to reach the second
-        // one; then NLMSG_DONE: nlmsghdr(16) + error code(4). The nlmsg_len/nla_len fields are
-        // stamped from the element counts by unified construction — no hand-filled lengths.
+        // one; then NLMSG_DONE: nlmsghdr(16) + error code(4). Every length field is stamped
+        // automatically: attributes by unified construction, the top nlmsg_len progressively
+        // by append/advance — no hand-filled lengths, no hand-computed offsets.
         Span<byte> datagram = new byte[72];
 
-        // The top message stays on the raw form: its payload is assembled progressively, so
-        // nlmsg_len covers nested content that no element count can express yet.
-        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram, 36);
-        message.Header = new NlmsgHeader { Len = 52, Type = Netlink.RtmNewlink, Seq = 1 };
-        var attributes = message.Elements[16..];
-
-        MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes, new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
-        MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes[8..], new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
+        // Progressive assembly: the top message starts empty over the whole datagram; each
+        // attribute is built in place in the free region, then committed with its padding.
+        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(
+            datagram, new NlmsgHeader { Type = Netlink.RtmNewlink, Seq = 1 });
+        message.AppendRange(new byte[Netlink.IfinfomsgSize]);
+        MutableFlexibleSpan<NlattrHeader, byte>.Create(
+            message.FreeElements, new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
+        message.Advance(Netlink.Align4(7));
+        MutableFlexibleSpan<NlattrHeader, byte>.Create(
+            message.FreeElements, new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
+        message.Advance(Netlink.Align4(9));
         MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
+        Assert.Equal(52, (int)message.Header.Len);
 
         // Both request builders produce byte-identical datagrams.
         Span<byte> declaredRequest = new byte[32];

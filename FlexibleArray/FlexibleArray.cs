@@ -23,7 +23,7 @@ public unsafe class FlexibleArray<THeader, T> : IDisposable
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
-    private readonly int _length;
+    private int _length;
     private readonly ReadOnlyMemory<byte> _memory;
     private readonly IMemoryOwner<byte>? _owner;
     private readonly void* _pointer;
@@ -66,8 +66,18 @@ public unsafe class FlexibleArray<THeader, T> : IDisposable
         return new FlexibleArray<THeader, T>(buffer, length, owner: null);
     }
 
-    /// <summary>Gets the logical number of tail elements.</summary>
+    /// <summary>
+    /// Gets the logical number of tail elements, cached from the header's length field. The
+    /// object's own members and the writable projections obtained from its
+    /// <see cref="Span"/> carry their owner and keep the cache in sync; a view anchored by
+    /// hand over the header does not. Writing the header directly through the public header
+    /// reference likewise bypasses synchronization — treat the header's length field as
+    /// read-only and change lengths through the library's members.
+    /// </summary>
     public int Length => _length;
+
+    // The cache moves when this object or one of its writable projections stamps the header.
+    internal void UpdateLength(int value) => _length = value;
 
     /// <summary>Gets the backing buffer; used to carry owners through construction.</summary>
     internal ReadOnlyMemory<byte> Buffer => _memory;
@@ -94,6 +104,9 @@ public unsafe class FlexibleArray<THeader, T> : IDisposable
             return view;
         }
     }
+
+    /// <summary>Converts the object to its whole-object view; a null object yields a default, empty view.</summary>
+    public static implicit operator FlexibleSpan<THeader, T>(FlexibleArray<THeader, T>? array) => array is null ? default : array.Span;
 
     /// <summary>
     /// Pins the backing storage and returns a handle to the object's start — for native APIs
