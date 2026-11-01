@@ -1,20 +1,20 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace FlexibleArray;
 
 /// <summary>
-/// A writable, long-holdable view of a flexible array object backed by a
-/// <see cref="Memory{T}"/> of bytes.
+/// A writable, long-holdable flexible array object backed by a <see cref="Memory{T}"/> of
+/// bytes.
 /// </summary>
 /// <remarks>
-/// Like any <see cref="Memory{T}"/>, the view can be stored in fields and held across
-/// asynchronous boundaries. Objects are constructed here — with an allocator, with an internal
-/// managed array, or over existing storage via <see cref="Create(Memory{byte}, int)"/>. If the
-/// backing storage comes from <see cref="FlexibleArray{THeader, T}"/>, disposing the owner
-/// invalidates the view: accessing <see cref="Span"/> then throws
-/// <see cref="ObjectDisposedException"/>.
+/// Like any <see cref="Memory{T}"/>, the view holds no owner: storage comes from an allocator,
+/// from an internal array on the pinned object heap, or from an existing buffer, and its
+/// lifetime follows the source. The view can be stored in fields and held across asynchronous
+/// boundaries.
 /// </remarks>
+[NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
 public readonly struct FlexibleArrayMemory<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
@@ -31,9 +31,11 @@ public readonly struct FlexibleArrayMemory<THeader, T>
     /// <summary>Gets the logical number of tail elements.</summary>
     public int Length => _length;
 
+    /// <summary>Gets the backing buffer; used by the interop marshaller to pin the object.</summary>
+    internal Memory<byte> Buffer => _buffer;
+
     /// <summary>Projects a fresh Span view on each call.</summary>
     /// <exception cref="InvalidOperationException">The view is default-constructed and has no backing storage.</exception>
-    /// <exception cref="ObjectDisposedException">The backing owner has been disposed.</exception>
     public FlexibleArraySpan<THeader, T> Span
     {
         get
@@ -83,6 +85,25 @@ public readonly struct FlexibleArrayMemory<THeader, T>
         if (buffer.Length < byteLength)
         {
             throw new ArgumentException($"The allocator returned {buffer.Length} bytes but at least {byteLength} are required.", nameof(allocator));
+        }
+
+        return Build(buffer, header, elements);
+    }
+
+    /// <summary>
+    /// Builds a complete object over an existing buffer: header first, then the tail, then the
+    /// declared-length consistency check. Alignment is the buffer's responsibility.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// The buffer is too short, or the header-declared tail length does not match the number of
+    /// elements.
+    /// </exception>
+    public static FlexibleArrayMemory<THeader, T> Create(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+    {
+        int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        if (buffer.Length < byteLength)
+        {
+            throw new ArgumentException($"The buffer needs at least {byteLength} bytes but has {buffer.Length}.", nameof(buffer));
         }
 
         return Build(buffer, header, elements);

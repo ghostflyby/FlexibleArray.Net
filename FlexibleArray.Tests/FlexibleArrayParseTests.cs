@@ -1,5 +1,3 @@
-using FlexibleArray;
-
 namespace FlexibleArray.Tests;
 
 /// <summary>
