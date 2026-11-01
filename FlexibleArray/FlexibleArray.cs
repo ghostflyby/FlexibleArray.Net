@@ -6,98 +6,55 @@ using System.Runtime.InteropServices.Marshalling;
 namespace FlexibleArray;
 
 /// <summary>
-/// A writable, long-holdable flexible array object: storage, projections, and — when the
+/// A read-only, long-holdable flexible array object: storage, projections, and — when the
 /// backing has one — the lifetime that releases it, in a single object.
 /// </summary>
 /// <remarks>
-/// Lifetime semantics are inherited from <see cref="ReadOnlyFlexibleArray{THeader, T}"/>;
-/// construction happens here because writing requires the writable shape.
+/// Storage comes from an aligned managed array, an allocator, an existing buffer, a pool
+/// rental, or an adopted native allocation; disposal routes it back to its source. The
+/// writable <see cref="MutableFlexibleArray{THeader,T}"/> derives from this type, so handing out a
+/// read-only reference is a free reference conversion. Ownerless managed storage has its
+/// finalizer suppressed at construction; pool rentals and adopted native objects keep one as
+/// a leak safety net. Projections are invisible to the GC: keep a reference to this object
+/// alive while spans are in use.
 /// </remarks>
 [NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
-public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THeader, T>
+public unsafe class FlexibleArray<THeader, T> : IDisposable
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
-    private FlexibleArray(ReadOnlyMemory<byte> buffer, int length, IMemoryOwner<byte>? owner)
-        : base(buffer, length, owner)
+    private readonly int _length;
+    private readonly ReadOnlyMemory<byte> _memory;
+    private readonly IMemoryOwner<byte>? _owner;
+    private readonly void* _pointer;
+    private readonly delegate* managed<void*, void> _release;
+    private bool _disposed;
+
+    internal FlexibleArray(ReadOnlyMemory<byte> buffer, int length, IMemoryOwner<byte>? owner)
     {
+        _length = length;
+        _memory = buffer;
+        _owner = owner;
+        if (owner is null)
+        {
+            GC.SuppressFinalize(this);
+        }
     }
 
     internal FlexibleArray(void* pointer, delegate* managed<void*, void> release, int length)
-        : base(pointer, release, length)
     {
+        _length = length;
+        _pointer = pointer;
+        _release = release;
     }
 
     /// <summary>
-    /// Builds a complete object with managed backing: the array is allocated on the pinned
-    /// object heap with extra bytes, and the object starts at the required alignment no matter
-    /// where the runtime places the allocation.
-    /// </summary>
-    /// <exception cref="ArgumentException">
-    /// The header-declared tail length does not match the number of elements.
-    /// </exception>
-    /// <exception cref="OverflowException">The aligned backing exceeds <see cref="int"/> bytes.</exception>
-    public static FlexibleArray<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
-    {
-        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
-        var alignment = FlexibleArrayLayout<THeader, T>.RequiredAlignment;
-        var allocatedLength = byteLength + (long)alignment - 1;
-        if (allocatedLength > int.MaxValue)
-        {
-            throw new OverflowException($"The flexible array needs {allocatedLength} bytes of backing, which exceeds int.MaxValue.");
-        }
-
-        var array = GC.AllocateArray<byte>((int)allocatedLength, pinned: true);
-
-        // The array never moves, so advancing the window to the first aligned position pins
-        // the alignment for the object's whole lifetime.
-        ref var start = ref MemoryMarshal.GetArrayDataReference(array);
-        var address = (nuint)Unsafe.AsPointer(ref start);
-        var offset = (int)(((address + alignment - 1) & ~(alignment - 1)) - address);
-        return Build(new Memory<byte>(array, offset, byteLength), header, elements);
-    }
-
-    /// <summary>
-    /// Builds a complete object in storage obtained from an allocator. Storage lifetime
-    /// belongs to the allocator; the view keeps whatever it returned reachable. Alignment is
-    /// the allocator's responsibility.
-    /// </summary>
-    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is null.</exception>
-    /// <exception cref="ArgumentException">
-    /// The allocator returned less storage than required, or the header-declared tail length
-    /// does not match the number of elements.
-    /// </exception>
-    public static FlexibleArray<THeader, T> Create(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
-    {
-        ArgumentNullException.ThrowIfNull(allocator);
-        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
-        var buffer = allocator(byteLength);
-        if (buffer.Length < byteLength)
-        {
-            throw new ArgumentException($"The allocator returned {buffer.Length} bytes but at least {byteLength} are required.", nameof(allocator));
-        }
-
-        return Build(buffer, header, elements);
-    }
-
-    /// <summary>
-    /// Builds a complete object over an existing buffer: header first, then the tail, then the
-    /// declared-length consistency check. Alignment is the buffer's responsibility.
-    /// </summary>
-    /// <exception cref="ArgumentException">
-    /// The buffer is too short, or the header-declared tail length does not match the number of
-    /// elements.
-    /// </exception>
-    public static FlexibleArray<THeader, T> Create(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
-        => Build(buffer, header, elements);
-
-    /// <summary>
-    /// Creates a writable view over an existing buffer. The buffer must be at least as long as
-    /// the required byte count; alignment is not validated.
+    /// Creates a read-only view over an existing buffer. The buffer must be at least as long
+    /// as the required byte count; alignment is not validated.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
     /// <exception cref="ArgumentException">The buffer is too short.</exception>
-    public static FlexibleArray<THeader, T> Create(Memory<byte> buffer, int length)
+    public static FlexibleArray<THeader, T> Create(ReadOnlyMemory<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
@@ -109,47 +66,91 @@ public sealed unsafe class FlexibleArray<THeader, T> : ReadOnlyFlexibleArray<THe
         return new FlexibleArray<THeader, T>(buffer, length, owner: null);
     }
 
+    /// <summary>Gets the logical number of tail elements.</summary>
+    public int Length => _length;
+
+    /// <summary>Gets the backing buffer; used to carry owners through construction.</summary>
+    internal ReadOnlyMemory<byte> Buffer => _memory;
+
+    /// <summary>Gets a read-only reference to the header.</summary>
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public ref readonly THeader Header
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return ref GetHeaderReference();
+        }
+    }
+
+    /// <summary>Gets a read-only projection of the complete object.</summary>
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public FlexibleSpan<THeader, T> Span
+    {
+        get
+        {
+            ThrowIfDisposed();
+            FlexibleSpan<THeader, T> view = new(in GetHeaderReference(), _length);
+            return view;
+        }
+    }
+
     /// <summary>
-    /// Returns a copy of this object that releases the given owner's storage when disposed.
+    /// Pins the backing storage and returns a handle to the object's start — for native APIs
+    /// that retain the pointer beyond a single call.
     /// </summary>
-    internal FlexibleArray<THeader, T> WithOwner(IMemoryOwner<byte> owner)
-        => new FlexibleArray<THeader, T>(Buffer, Length, owner);
-
-    /// <summary>Gets a reference to the header.</summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    public new ref THeader Header
+    public MemoryHandle Pin()
     {
-        get
-        {
-            ThrowIfDisposed();
-            return ref Unsafe.AsRef(in GetHeaderReference());
-        }
+        ThrowIfDisposed();
+        return _pointer != null ? new MemoryHandle(_pointer) : _memory.Pin();
     }
 
-    /// <summary>Gets a writable projection of the complete object.</summary>
-    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    public FlexibleArraySpan<THeader, T> Span
+    /// <summary>
+    /// Releases the backing storage to its source: pool rentals return to their pool, adopted
+    /// native objects release through the header-registered policy, ownerless managed storage
+    /// collects with the GC.
+    /// </summary>
+    public void Dispose()
     {
-        get
-        {
-            ThrowIfDisposed();
-            return new FlexibleArraySpan<THeader, T>(ref Unsafe.AsRef(in GetHeaderReference()), Length);
-        }
+        Release();
+        GC.SuppressFinalize(this);
     }
 
-    // Builds the complete object at the start of an already-validated buffer: header first,
-    // then the tail, then the declared-length consistency check.
-    private static FlexibleArray<THeader, T> Build(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+    /// <summary>Releases the backing storage; the finalizer safety net for missing Dispose.</summary>
+    ~FlexibleArray()
     {
-        var view = FlexibleArraySpan<THeader, T>.Create(buffer.Span, elements.Length);
-        view.Header = header;
-        elements.CopyTo(view.Elements);
-        if (THeader.GetTailLength(view.Header) != elements.Length)
+        Release();
+    }
+
+    private protected ref readonly THeader GetHeaderReference()
+    {
+        if (_pointer != null)
         {
-            throw new ArgumentException(
-                $"The header-declared tail length does not match the {elements.Length} elements provided.");
+            return ref *(THeader*)_pointer;
         }
 
-        return new FlexibleArray<THeader, T>(buffer, elements.Length, owner: null);
+        return ref Unsafe.As<byte, THeader>(ref MemoryMarshal.GetReference(_memory.Span));
+    }
+
+    private protected void ThrowIfDisposed()
+        => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    private void Release()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        if (_owner is not null)
+        {
+            _owner.Dispose();
+        }
+        else if (_release != null)
+        {
+            _release(_pointer);
+        }
     }
 }

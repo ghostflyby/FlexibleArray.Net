@@ -15,7 +15,7 @@ public struct ExampleCStrHeader : IFlexibleArrayHeader<ExampleCStrHeader, byte>
     public static ref byte GetFirstElement(ref ExampleCStrHeader header) => ref header.FirstElement;
 
     // strlen; termination is guaranteed by the producer — the standard trust model.
-    public static int GetTailLength(scoped in ExampleCStrHeader header)
+    public static int GetTailElementCount(scoped in ExampleCStrHeader header)
     {
         ref var h = ref Unsafe.AsRef(in header);
         var tail = MemoryMarshal.CreateReadOnlySpan(ref GetFirstElement(ref h), int.MaxValue);
@@ -32,7 +32,7 @@ public struct ExampleMallocCStringHeader
 
     public static ref byte GetFirstElement(ref ExampleMallocCStringHeader header) => ref header.FirstElement;
 
-    public static int GetTailLength(scoped in ExampleMallocCStringHeader header)
+    public static int GetTailElementCount(scoped in ExampleMallocCStringHeader header)
     {
         ref var h = ref Unsafe.AsRef(in header);
         var tail = MemoryMarshal.CreateReadOnlySpan(ref GetFirstElement(ref h), int.MaxValue);
@@ -55,13 +55,13 @@ public struct ExampleMallocCStringHeader
 internal static partial class DeclarativePosix
 {
     [LibraryImport("libc", EntryPoint = "getenv", StringMarshalling = StringMarshalling.Utf8)]
-    private static partial ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> GetEnv(string name);
+    private static partial FlexibleSpan<ExampleCStrHeader, byte> GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    private static partial FlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
+    private static partial MutableFlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
 
     [LibraryImport("libc", EntryPoint = "getcwd")]
-    private static partial ReadOnlyFlexibleArraySpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
+    private static partial FlexibleSpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial nint StrDupRaw(string source);
@@ -199,7 +199,7 @@ public sealed unsafe class PosixExamples
         using var array =
             FlexibleArrayTransfer.AdoptReadOnly<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(9, array.Length);
-        Assert.Equal("readonly!"u8.ToArray(), array.ReadOnlySpan.Elements.ToArray());
+        Assert.Equal("readonly!"u8.ToArray(), array.Span.Elements.ToArray());
     }
 
     [Fact]

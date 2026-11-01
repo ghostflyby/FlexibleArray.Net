@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -14,6 +15,7 @@ namespace FlexibleArray;
 /// distance between the header's start and the field reference returned by the interface; it
 /// is never inferred as <c>sizeof(THeader) - sizeof(T)</c>.
 /// </remarks>
+[SuppressMessage("ReSharper", "StaticMemberInGenericType")]
 public static class FlexibleArrayLayout<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged

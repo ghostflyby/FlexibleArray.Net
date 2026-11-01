@@ -8,7 +8,7 @@ namespace FlexibleArray;
 /// A read-only, short-lived view of a complete flexible array object.
 /// </summary>
 [NativeMarshalling(typeof(FlexibleArrayMarshaller<,>))]
-public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
+public readonly ref struct FlexibleSpan<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
@@ -20,13 +20,13 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     /// the header contract and is not validated — the declaration guarantees the object is
     /// valid at this location, matching P/Invoke trust semantics.
     /// </summary>
-    public ReadOnlyFlexibleArraySpan(in THeader header)
+    public FlexibleSpan(in THeader header)
     {
         _header = ref header;
-        _length = THeader.GetTailLength(in header);
+        _length = THeader.GetTailElementCount(in header);
     }
 
-    internal ReadOnlyFlexibleArraySpan(ref readonly THeader header, int length)
+    internal FlexibleSpan(ref readonly THeader header, int length)
     {
         _header = ref header;
         _length = length;
@@ -45,7 +45,7 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
         {
             // Recover a writable reference via Unsafe.AsRef so the header can be passed by ref
             // to the static contract member; read-onlyness is enforced by the returned
-            // ReadOnlySpan.
+            // Span.
             ref var header = ref Unsafe.AsRef(in _header);
             return MemoryMarshal.CreateReadOnlySpan(ref THeader.GetFirstElement(ref header), _length);
         }
@@ -57,7 +57,7 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
     /// <exception cref="ArgumentException">The buffer is too short.</exception>
-    public static ReadOnlyFlexibleArraySpan<THeader, T> Create(ReadOnlySpan<byte> buffer, int length)
+    public static FlexibleSpan<THeader, T> Create(ReadOnlySpan<byte> buffer, int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
@@ -67,7 +67,7 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
         }
 
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
-        return new ReadOnlyFlexibleArraySpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
+        return new FlexibleSpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
     /// false when the buffer is shorter than the full header, or when the derived tail length
     /// is negative or exceeds the buffer's element capacity.
     /// </returns>
-    public static bool TryParse(ReadOnlySpan<byte> buffer, out ReadOnlyFlexibleArraySpan<THeader, T> view)
+    public static bool TryParse(ReadOnlySpan<byte> buffer, out FlexibleSpan<THeader, T> view)
     {
         view = default;
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
@@ -87,9 +87,9 @@ public readonly ref struct ReadOnlyFlexibleArraySpan<THeader, T>
             return false;
         }
 
-        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
-        ref var header = ref Unsafe.As<byte, THeader>(ref firstByte);
-        var length = THeader.GetTailLength(in header);
+        var headerBuf = MemoryMarshal.Cast<byte, THeader>(buffer);
+        ref var header = ref MemoryMarshal.GetReference(headerBuf);
+        var length = THeader.GetTailElementCount(in header);
         long capacity = (buffer.Length - FlexibleArrayLayout<THeader, T>.FirstElementOffset)
             / FlexibleArrayLayout<THeader, T>.ElementSize;
         if ((uint)length > (uint)capacity)

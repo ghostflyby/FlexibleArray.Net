@@ -15,7 +15,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void Marshaller_PinsHeaderAndTailForTheCall()
     {
-        using var array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 7 }, [5, 6]);
 
         FlexibleArrayMarshaller<PacketHeader, int>.ClassMarshaller marshaller = default;
@@ -48,9 +48,9 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         Assert.Throws<ArgumentNullException>(
             () => marshaller.FromManaged(null!));
         Assert.Throws<ArgumentNullException>(
-            () => marshaller.FromManaged((ReadOnlyFlexibleArray<PacketHeader, int>)null!));
+            () => marshaller.FromManaged((FlexibleArray<PacketHeader, int>)null!));
 
-        var array = FlexibleArray<PacketHeader, int>.Create(
+        var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 0 }, ReadOnlySpan<int>.Empty);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => marshaller.FromManaged(array));
@@ -59,7 +59,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void DefaultMarshalling_IsWiredThroughNativeMarshalling()
     {
-        var nativeMarshalling = typeof(FlexibleArray<PacketHeader, int>)
+        var nativeMarshalling = typeof(MutableFlexibleArray<PacketHeader, int>)
             .GetCustomAttributes<NativeMarshallingAttribute>()
             .SingleOrDefault();
         Assert.NotNull(nativeMarshalling);
@@ -74,22 +74,22 @@ public sealed unsafe class FlexibleArrayMarshallerTests
 
         // Both span sends resolve to the entry's parameter-type overloads.
         Assert.All(registrations.Where(a => a.MarshalMode == MarshalMode.ManagedToUnmanagedIn &&
-                (a.ManagedType == typeof(FlexibleArraySpan<,>) || a.ManagedType == typeof(ReadOnlyFlexibleArraySpan<,>))),
+                (a.ManagedType == typeof(MutableFlexibleSpan<,>) || a.ManagedType == typeof(FlexibleSpan<,>))),
             a => Assert.Equal(typeof(FlexibleArrayMarshaller<,>), a.MarshallerType));
         // Span receives cannot be overloads (return types differ), so each has its own type.
         Assert.Equal(typeof(FlexibleArrayMarshaller<,>.WritableSpanMarshaller), registrations.Single(a =>
-            a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(FlexibleArraySpan<,>)).MarshallerType);
+            a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(MutableFlexibleSpan<,>)).MarshallerType);
         Assert.Equal(typeof(FlexibleArrayMarshaller<,>.ReadOnlySpanMarshaller), registrations.Single(a =>
-            a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(ReadOnlyFlexibleArraySpan<,>)).MarshallerType);
+            a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(FlexibleSpan<,>)).MarshallerType);
         // Both object sends share one stateful marshaller.
         Assert.All(registrations.Where(a => a.MarshalMode == MarshalMode.ManagedToUnmanagedIn &&
-                (a.ManagedType == typeof(FlexibleArray<,>) || a.ManagedType == typeof(ReadOnlyFlexibleArray<,>))),
+                (a.ManagedType == typeof(MutableFlexibleArray<,>) || a.ManagedType == typeof(FlexibleArray<,>))),
             a => Assert.Equal(typeof(FlexibleArrayMarshaller<,>.ClassMarshaller), a.MarshallerType));
         // Transferable receives adopt automatically through the constrained marshallers.
+        Assert.Equal(typeof(MutableFlexibleArrayOwnedMarshaller<,>), registrations.Single(a =>
+            a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(MutableFlexibleArray<,>)).MarshallerType);
         Assert.Equal(typeof(FlexibleArrayOwnedMarshaller<,>), registrations.Single(a =>
             a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(FlexibleArray<,>)).MarshallerType);
-        Assert.Equal(typeof(ReadOnlyFlexibleArrayOwnedMarshaller<,>), registrations.Single(a =>
-            a.MarshalMode == MarshalMode.ManagedToUnmanagedOut && a.ManagedType == typeof(ReadOnlyFlexibleArray<,>)).MarshallerType);
     }
 
     [Fact]
@@ -100,12 +100,12 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             return;
         }
 
-        using var array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
 
         // Rebuild the exact object bytes: header write first, then the tail.
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
+        var expectedView = MutableFlexibleSpan<PacketHeader, int>.Create(expected, 2);
         expectedView.Header = new PacketHeader { Count = 2, Timestamp = 12345 };
         expectedView.Elements[0] = 10;
         expectedView.Elements[1] = 20;
@@ -123,7 +123,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void ConvertToManaged_AnchorsViewAtReturnedPointer()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
         view.Header = new PacketHeader { Count = 2 };
         view.Elements[0] = 7;
         view.Elements[1] = 8;
@@ -145,7 +145,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         // A received object already carries its header; the anchoring constructor snapshots
         // the tail length from it.
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var source = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var source = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
         source.Header = new PacketHeader { Count = 2 };
         source.Elements[0] = 5;
 
@@ -168,17 +168,17 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void ConvertToUnmanaged_RejectsDefaultSpans()
     {
         Assert.Throws<InvalidOperationException>(
-            () => { _ = FlexibleArrayMarshaller<PacketHeader, int>.ConvertToUnmanaged(default(FlexibleArraySpan<PacketHeader, int>)); });
+            () => { _ = FlexibleArrayMarshaller<PacketHeader, int>.ConvertToUnmanaged(default(MutableFlexibleSpan<PacketHeader, int>)); });
         Assert.Throws<InvalidOperationException>(
-            () => { _ = FlexibleArrayMarshaller<PacketHeader, int>.ConvertToUnmanaged(default(ReadOnlyFlexibleArraySpan<PacketHeader, int>)); });
+            () => { _ = FlexibleArrayMarshaller<PacketHeader, int>.ConvertToUnmanaged(default(FlexibleSpan<PacketHeader, int>)); });
     }
 
     [Fact]
     public void ClassMarshaller_PinsReadOnlyObjectsForTheCall()
     {
-        using var array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 1, Timestamp = 3 }, [6]);
-        ReadOnlyFlexibleArray<PacketHeader, int> readOnly = array;
+        FlexibleArray<PacketHeader, int> readOnly = array;
 
         FlexibleArrayMarshaller<PacketHeader, int>.ClassMarshaller marshaller = default;
         marshaller.FromManaged(readOnly);
@@ -201,7 +201,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         }
 
         Span<byte> buffer = stackalloc byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = FlexibleArraySpan<PacketHeader, int>.Create(buffer, 2);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
         view.Header = new PacketHeader { Count = 2 };
         view.Elements[0] = 10;
         view.Elements[1] = 20;
@@ -222,12 +222,12 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             return;
         }
 
-        using var array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 77 }, [30, 40]);
-        ReadOnlyFlexibleArraySpan<PacketHeader, int> view = array.Span;
+        FlexibleSpan<PacketHeader, int> view = array.Span;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
+        var expectedView = MutableFlexibleSpan<PacketHeader, int>.Create(expected, 2);
         expectedView.Header = new PacketHeader { Count = 2, Timestamp = 77 };
         expectedView.Elements[0] = 30;
         expectedView.Elements[1] = 40;
@@ -267,12 +267,12 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             return;
         }
 
-        using var array = FlexibleArray<PacketHeader, int>.Create(
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
-        ReadOnlyFlexibleArray<PacketHeader, int> readOnly = array;
+        FlexibleArray<PacketHeader, int> readOnly = array;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var expectedView = FlexibleArraySpan<PacketHeader, int>.Create(expected, 2);
+        var expectedView = MutableFlexibleSpan<PacketHeader, int>.Create(expected, 2);
         expectedView.Header = new PacketHeader { Count = 2, Timestamp = 12345 };
         expectedView.Elements[0] = 10;
         expectedView.Elements[1] = 20;
@@ -327,16 +327,16 @@ internal static partial class NativeMemCmp
 {
     // Declaration-only: the type-level default marshallers apply automatically.
     [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmp(FlexibleArray<PacketHeader, int> left, void* right, nuint size);
+    internal static unsafe partial int MemCmp(MutableFlexibleArray<PacketHeader, int> left, void* right, nuint size);
 
     [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmpSpan(FlexibleArraySpan<PacketHeader, int> left, void* right, nuint size);
+    internal static unsafe partial int MemCmpSpan(MutableFlexibleSpan<PacketHeader, int> left, void* right, nuint size);
 
     [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmpReadOnly(ReadOnlyFlexibleArray<PacketHeader, int> left, void* right, nuint size);
+    internal static unsafe partial int MemCmpReadOnly(FlexibleArray<PacketHeader, int> left, void* right, nuint size);
 
     [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmpReadOnlySpan(ReadOnlyFlexibleArraySpan<PacketHeader, int> left, void* right, nuint size);
+    internal static unsafe partial int MemCmpReadOnlySpan(FlexibleSpan<PacketHeader, int> left, void* right, nuint size);
 }
 
 internal static partial class NativeEnv
@@ -344,10 +344,10 @@ internal static partial class NativeEnv
     // Declaration-only receive: native char* getenv(const char*) becomes a complete-object
     // view whose byte tail walks to the terminating NUL.
     [LibraryImport("libc", EntryPoint = "getenv", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial ReadOnlyFlexibleArraySpan<CStrHeader, byte> GetEnv(string name);
+    internal static partial FlexibleSpan<CStrHeader, byte> GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "getenv", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial FlexibleArraySpan<CStrHeader, byte> GetEnvWritable(string name);
+    internal static partial MutableFlexibleSpan<CStrHeader, byte> GetEnvWritable(string name);
 
     [LibraryImport("libc", EntryPoint = "setenv", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int SetEnv(string name, string value, int overwrite);

@@ -40,7 +40,7 @@ internal struct NlmsgHeader : IFlexibleArrayHeader<NlmsgHeader, byte>
     public static ref byte GetFirstElement(ref NlmsgHeader header) => ref header.FirstElement;
 
     // nlmsg_len covers the 16-byte header itself; the payload is the byte tail.
-    public static int GetTailLength(scoped in NlmsgHeader header) => (int)header.Len - Netlink.NlmsgHdrlen;
+    public static int GetTailElementCount(scoped in NlmsgHeader header) => (int)header.Len - Netlink.NlmsgHdrlen;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -53,7 +53,7 @@ internal struct NlattrHeader : IFlexibleArrayHeader<NlattrHeader, byte>
     public static ref byte GetFirstElement(ref NlattrHeader header) => ref header.FirstElement;
 
     // nla_len covers the 4-byte attribute header and excludes trailing alignment padding.
-    public static int GetTailLength(scoped in NlattrHeader header) => header.Len - Netlink.NlaHdrlen;
+    public static int GetTailElementCount(scoped in NlattrHeader header) => header.Len - Netlink.NlaHdrlen;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -93,7 +93,7 @@ internal static partial class DeclarativeNetlink
 
     public static void BuildDumpRequest(Span<byte> request)
     {
-        var message = FlexibleArraySpan<NlmsgHeader, byte>.Create(
+        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(
             request, Netlink.IfinfomsgSize);
         message.Header = new NlmsgHeader
         {
@@ -179,7 +179,7 @@ internal static partial class DeclarativeNetlink
             }
 
             // Anchoring constructor: the view derives its tail from the header in place.
-            ReadOnlyFlexibleArraySpan<NlmsgHeader, byte> message = new(in header);
+            FlexibleSpan<NlmsgHeader, byte> message = new(in header);
             if (header.Type == Netlink.NlmsgDone)
             {
                 finished = true;
@@ -211,7 +211,7 @@ internal static partial class DeclarativeNetlink
                 break;
             }
 
-            ReadOnlyFlexibleArraySpan<NlattrHeader, byte> attribute = new(in record);
+            FlexibleSpan<NlattrHeader, byte> attribute = new(in record);
             if (record.Type == Netlink.IflaIfname && attribute.Length > 0 && attribute.Elements[^1] == 0)
             {
                 names.Add(Encoding.ASCII.GetString(attribute.Elements[..^1]));
@@ -384,19 +384,19 @@ public sealed class NetlinkExamples
         // one; then NLMSG_DONE: nlmsghdr(16) + error code(4).
         Span<byte> datagram = new byte[72];
 
-        var message = FlexibleArraySpan<NlmsgHeader, byte>.Create(datagram, 36);
+        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram, 36);
         message.Header = new NlmsgHeader { Len = 52, Type = Netlink.RtmNewlink, Seq = 1 };
         var attributes = message.Elements[16..];
 
-        var loopback = FlexibleArraySpan<NlattrHeader, byte>.Create(attributes, 3);
+        var loopback = MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes, 3);
         loopback.Header = new NlattrHeader { Len = 7, Type = Netlink.IflaIfname };
         "lo\0"u8.CopyTo(loopback.Elements);
 
-        var ethernet = FlexibleArraySpan<NlattrHeader, byte>.Create(attributes[8..], 5);
+        var ethernet = MutableFlexibleSpan<NlattrHeader, byte>.Create(attributes[8..], 5);
         ethernet.Header = new NlattrHeader { Len = 9, Type = Netlink.IflaIfname };
         "eth0\0"u8.CopyTo(ethernet.Elements);
 
-        var done = FlexibleArraySpan<NlmsgHeader, byte>.Create(datagram[52..], 4);
+        var done = MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], 4);
         done.Header = new NlmsgHeader { Len = 20, Type = Netlink.NlmsgDone, Seq = 1 };
 
         // Both request builders produce byte-identical datagrams.

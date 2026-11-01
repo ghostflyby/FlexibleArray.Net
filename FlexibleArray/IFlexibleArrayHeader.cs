@@ -36,5 +36,5 @@ public interface IFlexibleArrayHeader<TSelf, T>
     /// mutated, and the library performs no bounds checking on the result: interop declarations
     /// are trusted, matching P/Invoke semantics.
     /// </remarks>
-    static abstract int GetTailLength(scoped in TSelf header);
+    static abstract int GetTailElementCount(scoped in TSelf header);
 }
