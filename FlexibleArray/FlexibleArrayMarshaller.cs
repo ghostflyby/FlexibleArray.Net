@@ -1,30 +1,49 @@
+using System.Buffers;
 using System.Runtime.InteropServices.Marshalling;
 
 namespace FlexibleArray;
 
 /// <summary>
-/// Entry-point marshaller that turns <see cref="FlexibleArray{THeader, T}"/> into a native
-/// <c>THeader*</c>, so a [LibraryImport] signature can declare the owner directly as an input
-/// parameter and the native side receives a pointer to the contiguous object. No copying and no
-/// allocation happen. Wired as the type-level default via
-/// <see cref="NativeMarshallingAttribute"/> on the owner.
+/// Entry-point marshaller that hands native code a <c>THeader*</c> to the complete object, so
+/// a [LibraryImport] signature can declare <see cref="FlexibleArrayMemory{THeader, T}"/>
+/// directly as an input parameter. The backing is pinned for the duration of the call and
+/// released afterwards; no copying happens.
 /// </summary>
 /// <remarks>
 /// Registered for <see cref="MarshalMode.ManagedToUnmanagedIn"/>, which covers by-value and
-/// <c>in</c> parameters. The pointer borrows the owner's native memory. The owner registers no
-/// finalizer, so even if the instance becomes unreachable mid-call the memory is never freed
-/// while the pointer is in flight. Runtime-based DllImport ignores custom marshallers; this
-/// only applies to [LibraryImport] source generation. The unmanaged-to-managed direction is
-/// deliberately absent: rebuilding a view requires the element count, which is protocol data
-/// the caller reads from the header.
+/// <c>in</c> parameters. The stateful shape keeps the pin alive from <see cref="FromManaged"/>
+/// to <see cref="Free"/> regardless of the backing kind. Alignment is the declaration's
+/// responsibility. Runtime-based DllImport ignores custom marshallers; this only applies to
+/// [LibraryImport] source generation.
 /// </remarks>
-[CustomMarshaller(typeof(FlexibleArray<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
-public static unsafe class FlexibleArrayMarshaller<THeader, T>
+[CustomMarshaller(typeof(FlexibleArrayMemory<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
+public unsafe struct FlexibleArrayMarshaller<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
-    /// <summary>Converts the owner into a pointer to its contiguous object memory.</summary>
-    /// <exception cref="ObjectDisposedException">The owner has been disposed.</exception>
-    public static THeader* ConvertToUnmanaged(FlexibleArray<THeader, T> array)
-        => (THeader*)array.DangerousGetPointer();
+    private MemoryHandle _handle;
+    private THeader* _pointer;
+
+    /// <summary>Pins the backing storage of the given object.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The object is default-constructed and has no backing storage.
+    /// </exception>
+    /// <remarks>Calling this method twice without an intervening <see cref="Free"/> leaks the
+    /// first pin; the source generator invokes each instance exactly once.</remarks>
+    public void FromManaged(FlexibleArrayMemory<THeader, T> managed)
+    {
+        if (managed.Buffer.IsEmpty)
+        {
+            throw new InvalidOperationException("A default-constructed FlexibleArrayMemory has no backing storage.");
+        }
+
+        _handle = managed.Buffer.Pin();
+        _pointer = (THeader*)_handle.Pointer;
+    }
+
+    /// <summary>Returns the pinned pointer passed to native code.</summary>
+    public THeader* ToUnmanaged() => _pointer;
+
+    /// <summary>Releases the pin.</summary>
+    public void Free() => _handle.Dispose();
 }

@@ -26,7 +26,6 @@ public readonly struct ReadOnlyFlexibleArrayMemory<THeader, T>
 
     /// <summary>Projects a fresh read-only Span view on each call.</summary>
     /// <exception cref="InvalidOperationException">The view is default-constructed and has no backing storage.</exception>
-    /// <exception cref="ObjectDisposedException">The backing owner has been disposed.</exception>
     public ReadOnlyFlexibleArraySpan<THeader, T> Span
     {
         get

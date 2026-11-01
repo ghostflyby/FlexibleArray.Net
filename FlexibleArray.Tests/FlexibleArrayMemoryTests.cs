@@ -1,38 +1,54 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 
 namespace FlexibleArray.Tests;
 
-/// <summary>Verifies the Memory layer's projection and its coupling with the owner lifetime.</summary>
+/// <summary>Verifies the Memory-backed construction, projection, and conversion semantics.</summary>
 public sealed class FlexibleArrayMemoryTests
 {
     [Fact]
     public void Span_ProjectsOverSameStorage()
     {
-        using var array = FlexibleArray<PacketHeader, int>.Create(new PacketHeader { Count = 2 }, [1, 2]);
-        FlexibleArrayMemory<PacketHeader, int> memory = array.Memory;
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            new PacketHeader { Count = 2 }, [1, 2]);
 
         FlexibleArraySpan<PacketHeader, int> view = memory.Span;
         view.Elements[1] = 99;
         Assert.Equal(2, memory.Length);
-        Assert.Equal(99, array.Span.Elements[1]);
+        Assert.Equal(99, memory.Span.Elements[1]);
     }
 
     [Fact]
-    public void Span_ThrowsAfterOwnerDisposed()
+    public void Create_WithZeroElements_PreservesPlaceholder()
     {
-        FlexibleArray<PacketHeader, int> array = FlexibleArray<PacketHeader, int>.Create(default, ReadOnlySpan<int>.Empty);
-        FlexibleArrayMemory<PacketHeader, int> memory = array.Memory;
-        array.Dispose();
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            new PacketHeader { Count = 0, FirstElement = -1 }, ReadOnlySpan<int>.Empty);
 
-        Assert.Throws<ObjectDisposedException>(() => { _ = memory.Span; });
-        Assert.Throws<ObjectDisposedException>(() => { _ = array.Memory.Span; });
+        Assert.Equal(0, memory.Length);
+        Assert.True(memory.Span.Elements.IsEmpty);
+        Assert.Equal(-1, memory.Span.Header.FirstElement);
+    }
+
+    [Fact]
+    public void Create_WithNonBlittableElements_RoundTrips()
+    {
+        FlexibleArrayMemory<CharHeader, char> chars = FlexibleArrayMemory<CharHeader, char>.Create(
+            new CharHeader { Count = 3 }, ['a', 'b', 'c']);
+        Assert.Equal(new[] { 'a', 'b', 'c' }, chars.Span.Elements.ToArray());
+        Assert.Equal('a', chars.Span.Header.FirstElement);
+
+        FlexibleArrayMemory<BoolHeader, bool> bools = FlexibleArrayMemory<BoolHeader, bool>.Create(
+            new BoolHeader { Id = 7, Count = 3 }, [true, false, true]);
+        Assert.Equal(new[] { true, false, true }, bools.Span.Elements.ToArray());
+        Assert.Equal(7, bools.Span.Header.Id);
     }
 
     [Fact]
     public void ImplicitConversion_ToReadOnlyMemory()
     {
-        using var array = FlexibleArray<PacketHeader, int>.Create(new PacketHeader { Count = 2 }, [5, 6]);
-        ReadOnlyFlexibleArrayMemory<PacketHeader, int> readOnly = array.Memory;
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            new PacketHeader { Count = 2 }, [5, 6]);
+        ReadOnlyFlexibleArrayMemory<PacketHeader, int> readOnly = memory;
 
         Assert.Equal(2, readOnly.Length);
         Assert.Equal(new[] { 5, 6 }, readOnly.Span.Elements.ToArray());
@@ -42,13 +58,13 @@ public sealed class FlexibleArrayMemoryTests
     [Fact]
     public void ImplicitConversion_MemoryNarrowsToSpanSemantics()
     {
-        using var array = FlexibleArray<PacketHeader, int>.Create(new PacketHeader { Count = 2 }, [1, 2]);
-        FlexibleArrayMemory<PacketHeader, int> memory = array.Memory;
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            new PacketHeader { Count = 2 }, [1, 2]);
 
         // Long-holdable narrows to stack-only; writable keeps its span semantics.
         FlexibleArraySpan<PacketHeader, int> span = memory;
         span.Elements[0] = 42;
-        Assert.Equal(42, array.Span.Elements[0]);
+        Assert.Equal(42, memory.Span.Elements[0]);
 
         // The read-only lattice edge composes with the writable-to-read-only edge.
         ReadOnlyFlexibleArrayMemory<PacketHeader, int> readOnlyMemory = memory;
@@ -155,5 +171,47 @@ public sealed class FlexibleArrayMemoryTests
     {
         Assert.Throws<ArgumentException>(() => FlexibleArrayMemory<PacketHeader, int>.Create(new byte[8], 1));
         Assert.Throws<ArgumentException>(() => ReadOnlyFlexibleArrayMemory<PacketHeader, int>.Create(new byte[8], 1));
+    }
+
+    [Fact]
+    public void Create_OverExistingMemory_BuildsContent()
+    {
+        Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            buffer, new PacketHeader { Count = 2 }, [8, 9]);
+
+        Assert.Equal(new[] { 8, 9 }, memory.Span.Elements.ToArray());
+        // The object was built directly in the caller's storage; element 0 lives at offset 16.
+        Assert.Equal(8, BitConverter.ToInt32(buffer.Span[16..]));
+    }
+
+    [Fact]
+    public void Create_FromPool_RentsBuildsAndHandsOutTheRental()
+    {
+        using IMemoryOwner<byte> owner = MemoryPool<byte>.Shared.Create(
+            new PacketHeader { Count = 3, Timestamp = 4 }, [1, 2, 3], out FlexibleArrayMemory<PacketHeader, int> view);
+
+        Assert.Equal(3, view.Length);
+        Assert.Equal(4, view.Span.Header.Timestamp);
+        Assert.Equal(new[] { 1, 2, 3 }, view.Span.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Create_FromPool_RejectsCountMismatch()
+    {
+        Assert.Throws<ArgumentException>(() => MemoryPool<byte>.Shared.Create(
+            new PacketHeader { Count = 5 }, [1, 2], out _));
+    }
+
+    [Fact]
+    public unsafe void Pin_ReturnsStableObjectPointer()
+    {
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            new PacketHeader { Count = 2, Timestamp = 9 }, [4, 5]);
+
+        using MemoryHandle handle = memory.Pin();
+        ref PacketHeader header = ref Unsafe.AsRef<PacketHeader>(handle.Pointer);
+        Assert.Equal(9, header.Timestamp);
+        Assert.Equal(4, PacketHeader.GetFirstElement(ref header));
     }
 }
