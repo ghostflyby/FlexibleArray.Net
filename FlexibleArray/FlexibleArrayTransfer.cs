@@ -18,7 +18,7 @@ public static class FlexibleArrayTransfer
     {
         ArgumentNullException.ThrowIfNull(pointer);
         var length = THeader.GetTailElementCount(in *pointer);
-        return new MutableFlexibleArray<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length);
+        return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length));
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ public static class FlexibleArrayTransfer
     {
         ArgumentNullException.ThrowIfNull(pointer);
         var length = THeader.GetTailElementCount(in *pointer);
-        return new FlexibleArray<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length);
+        return new FlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(pointer, &ReleaseThunk<THeader, T>.Invoke, length));
     }
 
     // Non-generic method in a generic type: function pointers cannot target generic methods,

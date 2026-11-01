@@ -117,6 +117,29 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     }
 
     [Fact]
+    public void LibraryImport_PassesAppendedBytesToNative()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        // Native sees the post-mutation committed state: the header carries the appended
+        // count and the tail carries the appended elements.
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(new PacketHeader { Timestamp = 77 }, 3);
+        array.Append(10);
+        array.Append(20);
+
+        Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        MutableFlexibleSpan<PacketHeader, int>.Create(expected, new PacketHeader { Timestamp = 77 }, [10, 20]);
+
+        fixed (byte* right = expected)
+        {
+            Assert.Equal(0, NativeMemCmp.MemCmp(array, right, (nuint)expected.Length));
+        }
+    }
+
+    [Fact]
     public void ConvertToManaged_AnchorsViewAtReturnedPointer()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
@@ -199,7 +222,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         buffer.CopyTo(expected);
         fixed (byte* right = expected)
         {
-            Assert.Equal(0, NativeMemCmp.MemCmpSpan(view, right, (nuint)expected.Length));
+            Assert.Equal(0, NativeMemCmp.MemCmp(view, right, (nuint)expected.Length));
         }
     }
 
@@ -220,7 +243,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
 
         fixed (byte* right = expected)
         {
-            Assert.Equal(0, NativeMemCmp.MemCmpReadOnlySpan(view, right, (nuint)expected.Length));
+            Assert.Equal(0, NativeMemCmp.MemCmp(view, right, (nuint)expected.Length));
         }
     }
 
@@ -262,7 +285,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
 
         fixed (byte* right = expected)
         {
-            Assert.Equal(0, NativeMemCmp.MemCmpReadOnly(readOnly, right, (nuint)expected.Length));
+            Assert.Equal(0, NativeMemCmp.MemCmp(readOnly, right, (nuint)expected.Length));
         }
     }
 
@@ -308,18 +331,13 @@ public sealed unsafe class FlexibleArrayMarshallerTests
 
 internal static partial class NativeMemCmp
 {
-    // Declaration-only: the type-level default marshallers apply automatically.
+    // One declaration serves every shape at the call sites: mutable views convert implicitly
+    // to the read-only view, and objects pass their Span projection. Note the pinning
+    // difference: a view parameter takes no pin, so objects passed this way must sit in
+    // immovable storage — as the pinned-heap objects here do; object-typed parameters pin
+    // through the class marshaller instead.
     [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmp(MutableFlexibleArray<PacketHeader, int> left, void* right, nuint size);
-
-    [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmpSpan(MutableFlexibleSpan<PacketHeader, int> left, void* right, nuint size);
-
-    [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmpReadOnly(FlexibleArray<PacketHeader, int> left, void* right, nuint size);
-
-    [LibraryImport("libc", EntryPoint = "memcmp")]
-    internal static unsafe partial int MemCmpReadOnlySpan(FlexibleSpan<PacketHeader, int> left, void* right, nuint size);
+    internal static unsafe partial int MemCmp(FlexibleSpan<PacketHeader, int> left, void* right, nuint size);
 }
 
 internal static partial class NativeEnv
