@@ -28,10 +28,11 @@ public static class FlexibleArrayLayout<THeader, T>
     public static int ElementSize { get; }
 
     /// <summary>
-    /// Gets the alignment every backing allocation must provide for the header's fields and the
-    /// tail elements: the smallest power of two not less than max(sizeof(THeader),
-    /// sizeof(T)), with a floor of 8. True field alignment cannot be queried at runtime, so
-    /// this is a conservative over-approximation.
+    /// Gets the alignment every backing allocation must provide for the header's fields — and,
+    /// under non-packed layouts, for the tail elements: the smallest power of two not less than
+    /// max(sizeof(THeader), sizeof(T)), with a floor of 8. True field alignment cannot be
+    /// queried at runtime, so this is a conservative over-approximation; packed layouts
+    /// deliberately place the tail at unaligned offsets, which no base alignment repairs.
     /// </summary>
     public static nuint RequiredAlignment { get; }
 
@@ -55,8 +56,9 @@ public static class FlexibleArrayLayout<THeader, T>
                 $"offset {FirstElementOffset}, header size {HeaderSize}, element size {ElementSize}.");
         }
 
-        // No field of the header can require more alignment than this value, and the elements
-        // sit at legal field offsets within the header, so they are aligned as well.
+        // No field of the header can require more alignment than this value. Under natural
+        // (non-packed) layout the elements then inherit the header's alignment; packed layouts
+        // deliberately shift the tail to unaligned offsets, which nothing can repair.
         RequiredAlignment = Math.Max(8, BitOperations.RoundUpToPowerOf2((uint)Math.Max(HeaderSize, ElementSize)));
     }
 

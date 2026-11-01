@@ -9,10 +9,11 @@ namespace FlexibleArray;
 /// </summary>
 /// <remarks>
 /// Like any <see cref="Memory{T}"/>, the view can be stored in fields and held across
-/// asynchronous boundaries, and can be created over the owner's allocation or over
-/// user-provided managed memory via <see cref="Create(Memory{byte}, int)"/>. If the backing
-/// storage comes from <see cref="FlexibleArray{THeader, T}"/>, disposing the owner invalidates
-/// the view: accessing <see cref="Span"/> then throws <see cref="ObjectDisposedException"/>.
+/// asynchronous boundaries. Objects are constructed here — with an allocator, with an internal
+/// managed array, or over existing storage via <see cref="Create(Memory{byte}, int)"/>. If the
+/// backing storage comes from <see cref="FlexibleArray{THeader, T}"/>, disposing the owner
+/// invalidates the view: accessing <see cref="Span"/> then throws
+/// <see cref="ObjectDisposedException"/>.
 /// </remarks>
 public readonly struct FlexibleArrayMemory<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
@@ -96,11 +97,18 @@ public readonly struct FlexibleArrayMemory<THeader, T>
     /// <exception cref="ArgumentException">
     /// The header-declared tail length does not match the number of elements.
     /// </exception>
+    /// <exception cref="OverflowException">The aligned backing exceeds <see cref="int"/> bytes.</exception>
     public static unsafe FlexibleArrayMemory<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
     {
         int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
         nuint alignment = FlexibleArrayLayout<THeader, T>.RequiredAlignment;
-        byte[] array = GC.AllocateArray<byte>(byteLength + (int)alignment - 1, pinned: true);
+        long allocatedLength = (long)byteLength + (long)alignment - 1;
+        if (allocatedLength > int.MaxValue)
+        {
+            throw new OverflowException($"The flexible array needs {allocatedLength} bytes of backing, which exceeds int.MaxValue.");
+        }
+
+        byte[] array = GC.AllocateArray<byte>((int)allocatedLength, pinned: true);
 
         // The array never moves, so advancing the window to the first aligned position pins
         // the alignment for the object's whole lifetime.

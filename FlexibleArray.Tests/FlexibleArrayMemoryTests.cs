@@ -105,7 +105,8 @@ public sealed class FlexibleArrayMemoryTests
 
         FlexibleArraySpan<Vector128Header, byte> view = memory.Span;
         nuint address = (nuint)Unsafe.AsPointer(ref view.Header);
-        Assert.True(address % 16 == 0);
+        // sizeof(Vector128Header) = 48, so the conservative policy demands 64-byte alignment.
+        Assert.True(FlexibleArrayLayout<Vector128Header, byte>.RequiredAlignment == 64);
         Assert.True(address % FlexibleArrayLayout<Vector128Header, byte>.RequiredAlignment == 0);
         Assert.Equal(new byte[] { 1, 2, 3 }, memory.Span.Elements.ToArray());
     }
