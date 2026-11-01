@@ -197,9 +197,21 @@ public sealed class FlexibleArrayMemoryTests
     }
 
     [Fact]
-    public void Create_FromPool_RejectsCountMismatchBeforeRenting()
+    public void Create_FromPool_RejectsCountMismatch()
     {
         Assert.Throws<ArgumentException>(() => MemoryPool<byte>.Shared.Create(
             new PacketHeader { Count = 5 }, [1, 2], out _));
+    }
+
+    [Fact]
+    public unsafe void Pin_ReturnsStableObjectPointer()
+    {
+        FlexibleArrayMemory<PacketHeader, int> memory = FlexibleArrayMemory<PacketHeader, int>.Create(
+            new PacketHeader { Count = 2, Timestamp = 9 }, [4, 5]);
+
+        using MemoryHandle handle = memory.Pin();
+        ref PacketHeader header = ref Unsafe.AsRef<PacketHeader>(handle.Pointer);
+        Assert.Equal(9, header.Timestamp);
+        Assert.Equal(4, PacketHeader.GetFirstElement(ref header));
     }
 }

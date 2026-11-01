@@ -25,8 +25,18 @@ public unsafe struct FlexibleArrayMarshaller<THeader, T>
     private THeader* _pointer;
 
     /// <summary>Pins the backing storage of the given object.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The object is default-constructed and has no backing storage.
+    /// </exception>
+    /// <remarks>Calling this method twice without an intervening <see cref="Free"/> leaks the
+    /// first pin; the source generator invokes each instance exactly once.</remarks>
     public void FromManaged(FlexibleArrayMemory<THeader, T> managed)
     {
+        if (managed.Buffer.IsEmpty)
+        {
+            throw new InvalidOperationException("A default-constructed FlexibleArrayMemory has no backing storage.");
+        }
+
         _handle = managed.Buffer.Pin();
         _pointer = (THeader*)_handle.Pointer;
     }

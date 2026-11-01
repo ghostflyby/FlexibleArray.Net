@@ -43,6 +43,13 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     }
 
     [Fact]
+    public void FromManaged_RejectsDefaultObject()
+    {
+        FlexibleArrayMarshaller<PacketHeader, int> marshaller = default;
+        Assert.Throws<InvalidOperationException>(() => marshaller.FromManaged(default));
+    }
+
+    [Fact]
     public void DefaultMarshalling_IsWiredThroughNativeMarshalling()
     {
         NativeMarshallingAttribute? nativeMarshalling = typeof(FlexibleArrayMemory<PacketHeader, int>)

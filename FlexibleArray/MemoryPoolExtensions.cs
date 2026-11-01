@@ -12,9 +12,9 @@ public static class MemoryPoolExtensions
     /// Rents storage for the complete object from the pool, builds it (header first, then the
     /// tail), and returns the rental, which the caller must return to the pool via
     /// <see cref="IDisposable.Dispose"/> — the view comes along through
-    /// <paramref name="view"/>. Pool buffers are aligned to at least pointer size; headers
-    /// requiring stronger alignment should use the managed construction or an allocator that
-    /// guarantees it.
+    /// <paramref name="view"/>. Pools guarantee no particular alignment; the shared pool's
+    /// arrays happen to be aligned to at least pointer size, and headers requiring stronger
+    /// alignment should use the managed construction or an allocator that guarantees it.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is null.</exception>
     /// <exception cref="ArgumentException">
@@ -31,16 +31,18 @@ public static class MemoryPoolExtensions
         ArgumentNullException.ThrowIfNull(pool);
         int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
 
-        // Validate before renting: on throw the out argument never reaches the caller, so a
-        // post-rental mismatch would leak the rental instead of returning it to the pool.
-        if (THeader.GetTailLength(in header) != elements.Length)
+        IMemoryOwner<byte> owner = pool.Rent(byteLength);
+        try
         {
-            throw new ArgumentException(
-                $"The header-declared tail length does not match the {elements.Length} elements provided.");
+            view = FlexibleArrayMemory<THeader, T>.Create(owner.Memory, header, elements);
+        }
+        catch
+        {
+            // The out argument never reaches the caller on throw, so return the rental here.
+            owner.Dispose();
+            throw;
         }
 
-        IMemoryOwner<byte> owner = pool.Rent(byteLength);
-        view = FlexibleArrayMemory<THeader, T>.Create(owner.Memory, header, elements);
         return owner;
     }
 }

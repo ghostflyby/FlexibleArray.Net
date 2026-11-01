@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
@@ -33,6 +34,18 @@ public readonly struct FlexibleArrayMemory<THeader, T>
 
     /// <summary>Gets the backing buffer; used by the interop marshaller to pin the object.</summary>
     internal Memory<byte> Buffer => _buffer;
+
+    /// <summary>
+    /// Pins the backing storage and returns a handle to the object's start. The handle keeps
+    /// the pin alive until disposed — for native APIs that retain the pointer beyond a single
+    /// call.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The view is default-constructed and has no backing storage.</exception>
+    public MemoryHandle Pin()
+    {
+        ThrowIfDefault();
+        return _buffer.Pin();
+    }
 
     /// <summary>Projects a fresh Span view on each call.</summary>
     /// <exception cref="InvalidOperationException">The view is default-constructed and has no backing storage.</exception>
