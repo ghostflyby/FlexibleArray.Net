@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace FlexibleArray;
@@ -26,6 +27,14 @@ public static class FlexibleArrayLayout<THeader, T>
     /// <summary>Gets the managed size of a single tail element in bytes.</summary>
     public static int ElementSize { get; }
 
+    /// <summary>
+    /// Gets the alignment every backing allocation must provide for the header's fields and the
+    /// tail elements: the smallest power of two not less than max(sizeof(THeader),
+    /// sizeof(T)), with a floor of 8. True field alignment cannot be queried at runtime, so
+    /// this is a conservative over-approximation.
+    /// </summary>
+    public static nuint RequiredAlignment { get; }
+
     static FlexibleArrayLayout()
     {
         HeaderSize = Unsafe.SizeOf<THeader>();
@@ -45,6 +54,10 @@ public static class FlexibleArrayLayout<THeader, T>
                 $"{typeof(THeader)}.GetFirstElement() returned a reference outside the header: " +
                 $"offset {FirstElementOffset}, header size {HeaderSize}, element size {ElementSize}.");
         }
+
+        // No field of the header can require more alignment than this value, and the elements
+        // sit at legal field offsets within the header, so they are aligned as well.
+        RequiredAlignment = Math.Max(8, BitOperations.RoundUpToPowerOf2((uint)Math.Max(HeaderSize, ElementSize)));
     }
 
     /// <summary>

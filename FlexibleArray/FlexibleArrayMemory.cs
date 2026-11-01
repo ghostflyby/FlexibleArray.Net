@@ -62,6 +62,70 @@ public readonly struct FlexibleArrayMemory<THeader, T>
         return new FlexibleArrayMemory<THeader, T>(buffer, length);
     }
 
+    /// <summary>
+    /// Builds a complete object in storage obtained from an allocator: the header is written
+    /// first, then the tail elements are copied, and the header-declared tail length is
+    /// validated against the number of elements. Storage lifetime belongs to the allocator;
+    /// the view keeps whatever it returned reachable. Alignment is the allocator's
+    /// responsibility.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="allocator"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// The allocator returned less storage than required, or the header-declared tail length
+    /// does not match the number of elements.
+    /// </exception>
+    public static FlexibleArrayMemory<THeader, T> Create(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
+    {
+        ArgumentNullException.ThrowIfNull(allocator);
+        int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        Memory<byte> buffer = allocator(byteLength);
+        if (buffer.Length < byteLength)
+        {
+            throw new ArgumentException($"The allocator returned {buffer.Length} bytes but at least {byteLength} are required.", nameof(allocator));
+        }
+
+        return Build(buffer, header, elements);
+    }
+
+    /// <summary>
+    /// Builds a complete object with managed backing: the array is allocated on the pinned
+    /// object heap with extra bytes, and the object starts at the required alignment no matter
+    /// where the runtime places the allocation. The backing is garbage-collected normally once
+    /// no view keeps it reachable; there is nothing to dispose.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// The header-declared tail length does not match the number of elements.
+    /// </exception>
+    public static unsafe FlexibleArrayMemory<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
+    {
+        int byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        nuint alignment = FlexibleArrayLayout<THeader, T>.RequiredAlignment;
+        byte[] array = GC.AllocateArray<byte>(byteLength + (int)alignment - 1, pinned: true);
+
+        // The array never moves, so advancing the window to the first aligned position pins
+        // the alignment for the object's whole lifetime.
+        ref byte start = ref MemoryMarshal.GetArrayDataReference(array);
+        nuint address = (nuint)Unsafe.AsPointer(ref start);
+        int offset = (int)(((address + alignment - 1) & ~(alignment - 1)) - address);
+        return Build(new Memory<byte>(array, offset, byteLength), header, elements);
+    }
+
+    // Builds the complete object at the start of an already-validated buffer: header first,
+    // then the tail, then the declared-length consistency check.
+    private static FlexibleArrayMemory<THeader, T> Build(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+    {
+        FlexibleArraySpan<THeader, T> view = FlexibleArraySpan<THeader, T>.Create(buffer.Span, elements.Length);
+        view.Header = header;
+        elements.CopyTo(view.Elements);
+        if (THeader.GetTailLength(view.Header) != elements.Length)
+        {
+            throw new ArgumentException(
+                $"The header-declared tail length does not match the {elements.Length} elements provided.");
+        }
+
+        return new FlexibleArrayMemory<THeader, T>(buffer, elements.Length);
+    }
+
     /// <summary>Converts to a read-only view.</summary>
     public static implicit operator ReadOnlyFlexibleArrayMemory<THeader, T>(FlexibleArrayMemory<THeader, T> memory)
         => new(memory._buffer, memory._length);
