@@ -2,7 +2,7 @@ namespace FlexibleArray.Tests;
 
 /// <summary>
 /// Verifies self-describing parsing: the header contract derives the logical tail length from
-/// the complete object, either from a count field or from a capacity-bounded sentinel walk.
+/// the complete object, either from a count field or from a sentinel walk to the terminator.
 /// </summary>
 public sealed class FlexibleArrayParseTests
 {

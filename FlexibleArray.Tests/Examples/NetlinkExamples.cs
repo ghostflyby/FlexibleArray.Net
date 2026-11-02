@@ -402,7 +402,6 @@ public sealed class NetlinkExamples
         MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
         Assert.Equal(52, (int)message.Header.Len);
 
-        // Both request builders produce byte-identical datagrams.
         Span<byte> declaredRequest = new byte[32];
         Span<byte> rawRequest = new byte[32];
         DeclarativeNetlink.BuildDumpRequest(declaredRequest);

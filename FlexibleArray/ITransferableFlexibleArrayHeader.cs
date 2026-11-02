@@ -8,8 +8,8 @@ namespace FlexibleArray;
 /// <remarks>
 /// Lifetime policy is part of the header's protocol identity: two headers with identical
 /// layout but different lifetimes (a borrowed static string versus a malloc'd copy) are
-/// distinct header types, and only the transferable one implements this contract. The
-/// registered release must free the whole object at the given header's location.
+/// distinct header types. The registered release must free the whole object at the given
+/// header's location.
 /// </remarks>
 public interface ITransferableFlexibleArrayHeader<TSelf, T>
     where TSelf : unmanaged, IFlexibleArrayHeader<TSelf, T>, ITransferableFlexibleArrayHeader<TSelf, T>
