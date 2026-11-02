@@ -17,6 +17,12 @@ namespace FlexibleArray;
 /// instance fields by reference (CS8170); taking the header by <c>ref</c> keeps the returned
 /// reference tied to the caller's storage.
 /// </para>
+/// <para>
+/// The header's length-related fields are contract state: do not mutate them through a
+/// public header reference — change lengths only through
+/// <see cref="IConstructibleFlexibleArrayHeader{TSelf, T}.WithTailElementCount"/> or the
+/// library's capacity members.
+/// </para>
 /// </remarks>
 public interface IFlexibleArrayHeader<TSelf, T>
     where TSelf : unmanaged, IFlexibleArrayHeader<TSelf, T>
