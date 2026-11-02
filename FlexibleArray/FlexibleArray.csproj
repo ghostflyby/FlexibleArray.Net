@@ -35,6 +35,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../FlexibleArray.Analyzer/FlexibleArray.Analyzer.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"/>
+  </ItemGroup>
+
+  <Target Name="PackAnalyzers" BeforeTargets="_GetPackageFiles" DependsOnTargets="Build">
+    <ItemGroup>
+      <None Include="../FlexibleArray.Analyzer/bin/$(Configuration)/netstandard2.0/FlexibleArray.Analyzer.dll"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false"/>
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/"/>
     <None Include="../LICENSE" Pack="true" PackagePath="/"/>
   </ItemGroup>

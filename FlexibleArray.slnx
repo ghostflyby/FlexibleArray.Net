@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="FlexibleArray/FlexibleArray.csproj" />
+  <Project Path="FlexibleArray.Analyzer/FlexibleArray.Analyzer.csproj" />
+  <Project Path="FlexibleArray.Analyzer.Tests/FlexibleArray.Analyzer.Tests.csproj" />
   <Project Path="FlexibleArray.Tests/FlexibleArray.Tests.csproj" />
 </Solution>
