@@ -7,7 +7,7 @@ namespace FlexibleArray.Tests;
 /// <summary>Sample header: int + long + int. 64-bit LP64 layout: 0/8/16, size 24.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct PacketHeader
-    : IFlexibleArrayHeader<PacketHeader, int>, IConstructibleFlexibleArrayHeader<PacketHeader, int>
+    : IConstructibleFlexibleArrayHeader<PacketHeader, int>
 {
     public int Count;
     public long Timestamp;
@@ -187,7 +187,7 @@ public struct CStrHeader : IFlexibleArrayHeader<CStrHeader, byte>
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct BrokenSetHeader
-    : IFlexibleArrayHeader<BrokenSetHeader, int>, IConstructibleFlexibleArrayHeader<BrokenSetHeader, int>
+    : IConstructibleFlexibleArrayHeader<BrokenSetHeader, int>
 {
     public int Count;
     public int FirstElement;

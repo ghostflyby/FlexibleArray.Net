@@ -7,23 +7,18 @@ namespace FlexibleArray;
 /// path; the registration is an ordinary interface test at construction time.
 /// </summary>
 /// <remarks>
-/// <typeparamref name="TSelf"/> is the implementing header type by convention; unlike
-/// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}"/> the contract cannot enforce it
-/// self-referentially, because construction tests the capability at run time and a
-/// self-referential constraint would make that test inexpressible.
-/// </remarks>
-/// <remarks>
 /// Capability is part of the header's protocol identity, mirroring
-/// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}"/>. Count-field headers return a
-/// copy with the field set; byte-length headers (nlmsg_len, nla_len) convert the element
-/// count to bytes. Headers that do not implement it fall back to declared-length
-/// construction: the caller fills the length field and the constructor verifies it against
-/// the element count. Sentinel-terminated headers should not implement it: their storage
-/// needs one byte beyond the declared tail, which the byte-counting model does not express,
-/// and a terminator is never written during construction — so a sentinel header that
-/// implements this contract anyway would walk off the tail when its length is read back.
-/// Not implementing the interface keeps that hazard out of reach by convention; it is an
-/// implementer-side obligation, not an enforced property.
+/// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}"/>
+/// (<typeparamref name="TSelf"/> is the implementing header type by convention). Count-field
+/// headers return a copy with the field set; byte-length headers (nlmsg_len, nla_len)
+/// convert the element count to bytes. Headers that do not implement it fall back to
+/// declared-length construction: the caller fills the length field and the constructor
+/// verifies it against the element count. Sentinel-terminated headers should not implement
+/// it: their storage needs one byte beyond the declared tail, which the byte-counting model
+/// does not express, and a terminator is never written during construction — so a sentinel
+/// header that implements this contract anyway would walk off the tail when its length is
+/// read back. Not implementing the interface keeps that hazard out of reach by convention;
+/// it is an implementer-side obligation, not an enforced property.
 /// </remarks>
 public interface IConstructibleFlexibleArrayHeader<TSelf, T>
     : IFlexibleArrayHeader<TSelf, T>
@@ -36,5 +31,5 @@ public interface IConstructibleFlexibleArrayHeader<TSelf, T>
     /// APIs stamp the count through this member and then verify the pair agrees, so an
     /// asymmetric implementation fails loudly instead of corrupting the object.
     /// </remarks>
-    TSelf WithTailElementCount(int count);
+    protected internal TSelf WithTailElementCount(int count);
 }

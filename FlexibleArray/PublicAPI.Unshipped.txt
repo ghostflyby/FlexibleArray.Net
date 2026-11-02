@@ -11,7 +11,6 @@ FlexibleArray.FlexibleSpan<THeader, T>.FlexibleSpan() -> void
 FlexibleArray.FlexibleSpan<THeader, T>.FlexibleSpan(in THeader header) -> void
 FlexibleArray.FlexibleSpan<THeader, T>.Header.get -> THeader
 FlexibleArray.FlexibleSpan<THeader, T>.Length.get -> int
-FlexibleArray.IFlexibleArrayHeader<TSelf, T>.GetTailElementCount(scoped in TSelf header) -> int
 FlexibleArray.MutableFlexibleArray<THeader, T>
 FlexibleArray.MutableFlexibleArray<THeader, T>.Header.get -> THeader
 FlexibleArray.MutableFlexibleArray<THeader, T>.Span.get -> FlexibleArray.MutableFlexibleSpan<THeader, T>
@@ -24,6 +23,7 @@ FlexibleArray.MutableFlexibleSpan<THeader, T>.MutableFlexibleSpan(ref THeader he
 FlexibleArray.FlexibleArray<THeader, T>.Header.get -> THeader
 FlexibleArray.FlexibleArrayLayout<THeader, T>
 static FlexibleArray.FlexibleArray<THeader, T>.Create(System.ReadOnlyMemory<byte> buffer, int length) -> FlexibleArray.FlexibleArray<THeader, T>!
+static FlexibleArray.FlexibleArray<THeader, T>.implicit operator FlexibleArray.FlexibleSpan<THeader, T>(FlexibleArray.FlexibleArray<THeader, T>? array) -> FlexibleArray.FlexibleSpan<THeader, T>
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.ElementSize.get -> int
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.FirstElementOffset.get -> nint
 static FlexibleArray.FlexibleArrayLayout<THeader, T>.GetRequiredBytes(int length) -> int
@@ -47,21 +47,33 @@ static FlexibleArray.FlexibleArrayOwnedMarshaller<THeader, T>.ConvertToManaged(T
 static FlexibleArray.FlexibleArrayTransfer.Adopt<THeader, T>(THeader* pointer) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.FlexibleArrayTransfer.AdoptReadOnly<THeader, T>(THeader* pointer) -> FlexibleArray.FlexibleArray<THeader, T>!
 FlexibleArray.IFlexibleArrayHeader<TSelf, T>
-FlexibleArray.IFlexibleArrayHeader<TSelf, T>.GetFirstElement(ref TSelf header) -> T
 FlexibleArray.IConstructibleFlexibleArrayHeader<TSelf, T>
-FlexibleArray.IConstructibleFlexibleArrayHeader<TSelf, T>.WithTailElementCount(int count) -> TSelf
 FlexibleArray.ITransferableFlexibleArrayHeader<TSelf, T>
-FlexibleArray.ITransferableFlexibleArrayHeader<TSelf, T>.Release(scoped ref TSelf header) -> void
 FlexibleArray.MemoryPoolExtensions
 static FlexibleArray.FlexibleSpan<THeader, T>.Create(System.ReadOnlySpan<byte> buffer, int length) -> FlexibleArray.FlexibleSpan<THeader, T>
 static FlexibleArray.FlexibleSpan<THeader, T>.TryParse(System.ReadOnlySpan<byte> buffer, out FlexibleArray.FlexibleSpan<THeader, T> view) -> bool
 static FlexibleArray.MemoryPoolExtensions.Create<THeader, T>(this System.Buffers.MemoryPool<byte>! pool, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
+static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator FlexibleArray.MutableFlexibleSpan<THeader, T>(FlexibleArray.MutableFlexibleArray<THeader, T>? array) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
+static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer, in THeader header) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
+static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(in THeader header, int capacity) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Func<int, System.Memory<byte>>! allocator, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Memory<byte> buffer, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Memory<byte> buffer, int length) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer, int length) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleSpan<THeader, T>.implicit operator FlexibleArray.FlexibleSpan<THeader, T>(FlexibleArray.MutableFlexibleSpan<THeader, T> span) -> FlexibleArray.FlexibleSpan<THeader, T>
+FlexibleArray.MutableFlexibleArray<THeader, T>.Capacity.get -> int
+FlexibleArray.MutableFlexibleArray<THeader, T>.FreeElements.get -> System.Span<T>
+FlexibleArray.MutableFlexibleArray<THeader, T>.Append(T item) -> void
+FlexibleArray.MutableFlexibleArray<THeader, T>.AppendRange(System.ReadOnlySpan<T> items) -> void
+FlexibleArray.MutableFlexibleArray<THeader, T>.Advance(int elementCount) -> void
+FlexibleArray.MutableFlexibleArray<THeader, T>.Truncate(int length) -> void
+FlexibleArray.MutableFlexibleSpan<THeader, T>.Capacity.get -> int
+FlexibleArray.MutableFlexibleSpan<THeader, T>.FreeElements.get -> System.Span<T>
+FlexibleArray.MutableFlexibleSpan<THeader, T>.Append(T item) -> void
+FlexibleArray.MutableFlexibleSpan<THeader, T>.AppendRange(System.ReadOnlySpan<T> items) -> void
+FlexibleArray.MutableFlexibleSpan<THeader, T>.Advance(int elementCount) -> void
+FlexibleArray.MutableFlexibleSpan<THeader, T>.Truncate(int length) -> void
 FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>
 static FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>.ConvertToManaged(THeader* pointer) -> FlexibleArray.MutableFlexibleArray<THeader, T>?
