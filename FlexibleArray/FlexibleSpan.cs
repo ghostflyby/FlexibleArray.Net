@@ -71,9 +71,8 @@ public readonly ref struct FlexibleSpan<THeader, T>
     }
 
     /// <summary>
-    /// Parses a self-describing object from a buffer: reads the header, asks the header
-    /// contract for the logical tail length, and clamps it against the buffer's element
-    /// capacity.
+    /// Parses a self-describing object from a buffer: reads the header and asks the header
+    /// contract for the logical tail length.
     /// </summary>
     /// <returns>
     /// false when the buffer is shorter than the full header, or when the derived tail length

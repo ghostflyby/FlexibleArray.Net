@@ -6,22 +6,14 @@ namespace FlexibleArray;
 
 /// <summary>
 /// Entry point for the default marshalling of every flexible array type: native code receives
-/// a <c>THeader*</c> to the complete object, and a returned pointer becomes an anchored view.
-/// No copying happens in either direction.
+/// a <c>THeader*</c> to the complete object; a returned pointer becomes an anchored view for
+/// span types and an adopted object for object types. No copying happens in either direction.
 /// </summary>
 /// <remarks>
-/// The span send directions are parameter-type overloads on this entry type; the receive
-/// directions cannot be — they differ only in return type, and CustomMarshallerAttribute has
-/// no method-name argument — so each lives on its own nested type. Span views hold no
-/// handle, and unlike the built-in <c>Span&lt;T&gt;</c> marshalling no pin is taken: a span
-/// over a movable managed array must not be passed — the backing must be stack, native, or
-/// pinned/pinned-heap memory, and that precondition is the caller's runtime responsibility,
-/// not something a declaration can enforce. Memory-backed objects are pinned by
-/// <see cref="ClassMarshaller"/> regardless of backing kind; the two kinds share one
-/// stateful shape through FromManaged overloads. The memory-backed types register no receive
-/// direction: a raw pointer cannot produce a Memory. Default-constructed objects are rejected
-/// instead of marshalling to a silent NULL pointer. Runtime-based DllImport ignores custom
-/// marshallers; this only applies to [LibraryImport] source generation.
+/// Unlike the built-in <c>Span&lt;T&gt;</c> marshalling, span parameters take no pin: the
+/// backing must be stack, native, or pinned memory — the caller's runtime responsibility.
+/// Memory-backed objects are pinned for the call. Applies to [LibraryImport] source
+/// generation only; runtime-based DllImport ignores custom marshallers.
 /// </remarks>
 [CustomMarshaller(typeof(MutableFlexibleSpan<,>), MarshalMode.ManagedToUnmanagedIn, typeof(FlexibleArrayMarshaller<,>))]
 [CustomMarshaller(typeof(MutableFlexibleSpan<,>), MarshalMode.ManagedToUnmanagedOut, typeof(FlexibleArrayMarshaller<,>.WritableSpanMarshaller))]

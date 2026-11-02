@@ -9,19 +9,21 @@ namespace FlexibleArray;
 public static class MemoryPoolExtensions
 {
     /// <summary>
-    /// Rents storage for the complete object from the pool and builds it (header first, then
-    /// the tail). The tail length is derived from the element count — stamped when the header
-    /// registers a write-back, validated against the declared field otherwise. Disposing the
-    /// returned object returns the rental — or the finalizer does, as a leak safety net. Pools
-    /// guarantee no particular alignment; the shared pool's arrays happen to be aligned to at
-    /// least pointer size, and headers requiring stronger alignment should use the managed
-    /// construction or an allocator that guarantees it.
+    /// Rents storage from the pool, builds the complete object in it, and returns a writable
+    /// object whose disposal returns the rental — or the finalizer does, as a leak safety
+    /// net. The tail length is derived from the element count.
     /// </summary>
+    /// <remarks>
+    /// Pools guarantee no particular alignment: headers requiring more than the shared pool's
+    /// pointer-size floor should use the managed construction or an aligning allocator.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="pool"/> is null.</exception>
     /// <exception cref="ArgumentException">
     /// A header without a registered write-back declares a tail length that does not match the
     /// number of elements.
     /// </exception>
+    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
+    /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
     public static MutableFlexibleArray<THeader, T> Create<THeader, T>(
         this MemoryPool<byte> pool,
         in THeader header,

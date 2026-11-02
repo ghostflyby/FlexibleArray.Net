@@ -7,8 +7,8 @@ namespace FlexibleArray.Tests;
 
 /// <summary>
 /// Verifies the default pointer marshaller: declaring a flexible array type directly in a
-/// [LibraryImport] signature passes the native side a pinned THeader* to the contiguous
-/// object memory.
+/// [LibraryImport] signature passes the native side a THeader* to the contiguous object
+/// memory — pinned for object types, unpinned for span types.
 /// </summary>
 public sealed unsafe class FlexibleArrayMarshallerTests
 {
@@ -66,7 +66,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         Assert.True(nativeMarshalling.NativeType.IsGenericTypeDefinition);
         Assert.Equal(typeof(FlexibleArrayMarshaller<,>), nativeMarshalling.NativeType);
 
-        // The single entry point hosts registrations for all four types; check the matrix.
+        // The single entry point hosts registrations for all four types.
         var registrations = typeof(FlexibleArrayMarshaller<PacketHeader, int>)
             .GetCustomAttributes<CustomMarshallerAttribute>()
             .ToList();
@@ -103,7 +103,6 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         using var array = MutableFlexibleArray<PacketHeader, int>.Create(
             new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
 
-        // Rebuild the exact object bytes: header write first, then the tail.
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
         MutableFlexibleSpan<PacketHeader, int>.Create(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
 
@@ -159,8 +158,6 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     [Fact]
     public void ConvertToManaged_AnchorsWritableSpanAtReturnedPointer()
     {
-        // A received object already carries its header; the anchoring constructor snapshots
-        // the tail length from it.
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
         MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [5, 0]);
 

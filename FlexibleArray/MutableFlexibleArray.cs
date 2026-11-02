@@ -104,6 +104,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// write-back declares a tail length that does not match the number of elements.
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
+    /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
     public static MutableFlexibleArray<THeader, T> Create(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
     {
         ArgumentNullException.ThrowIfNull(allocator);
@@ -126,6 +127,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// length that does not match the number of elements.
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
+    /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
     public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
         => Build(buffer, header, elements);
 
