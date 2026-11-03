@@ -4,14 +4,17 @@ using System.Runtime.InteropServices;
 
 namespace FlexibleArray;
 
-internal unsafe class FlexibleArrayCore<THeader, T>
+internal sealed unsafe class FlexibleArrayCore<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
     private readonly ReadOnlyMemory<byte> _memory;
     private readonly IMemoryOwner<byte>? _owner;
-    protected readonly THeader* Pointer;
-    private bool _disposed;
+    private readonly Action<FlexibleSpan<THeader, T>>? _release;
+    private readonly THeader* _pointer;
+
+    // Negative stores the bitwise complement of the committed length, which also marks the
+    // object as disposed; zero is a valid length, so the sign is the only free channel.
     private int _committedLength;
 
     internal FlexibleArrayCore(ReadOnlyMemory<byte> buffer, int length, IMemoryOwner<byte>? owner)
@@ -25,9 +28,10 @@ internal unsafe class FlexibleArrayCore<THeader, T>
         }
     }
 
-    internal FlexibleArrayCore(THeader* pointer, int length)
+    internal FlexibleArrayCore(THeader* pointer, Action<FlexibleSpan<THeader, T>> release, int length)
     {
-        Pointer = pointer;
+        _release = release;
+        _pointer = pointer;
         _committedLength = length;
     }
 
@@ -44,23 +48,23 @@ internal unsafe class FlexibleArrayCore<THeader, T>
     {
         get
         {
-            if (Pointer != null)
+            if (_pointer != null)
             {
-                return ref *Pointer;
+                return ref *_pointer;
             }
 
             return ref Unsafe.As<byte, THeader>(ref MemoryMarshal.GetReference(_memory.Span));
         }
     }
 
-    internal bool IsDisposed => _disposed;
+    internal bool IsDisposed => _committedLength < 0;
 
-    internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+    internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_committedLength < 0, this);
 
     internal MemoryHandle Pin()
     {
         ThrowIfDisposed();
-        return Pointer != null ? new MemoryHandle(Pointer) : _memory.Pin();
+        return _pointer != null ? new MemoryHandle(_pointer) : _memory.Pin();
     }
 
     internal void Dispose()
@@ -148,23 +152,19 @@ internal unsafe class FlexibleArrayCore<THeader, T>
 
     private void Release()
     {
-        if (_disposed)
+        if (_committedLength < 0)
         {
             return;
         }
 
-        _disposed = true;
+        _committedLength = ~_committedLength;
         if (_owner is not null)
         {
             _owner.Dispose();
         }
         else
         {
-            ReleaseStorage();
+            _release?.Invoke(new FlexibleSpan<THeader, T>(in *_pointer));
         }
     }
-
-    // Objects with no owner and no native storage hold nothing; adopted objects route
-    // disposal through the header-registered release.
-    protected virtual void ReleaseStorage() { }
 }

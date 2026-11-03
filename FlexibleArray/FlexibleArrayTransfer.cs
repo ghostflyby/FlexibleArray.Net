@@ -18,7 +18,10 @@ public static class FlexibleArrayTransfer
     {
         ArgumentNullException.ThrowIfNull(pointer);
         var length = THeader.GetTailElementCount(in *pointer);
-        return new MutableFlexibleArray<THeader, T>(new AdoptedCore<THeader, T>(pointer, length));
+        return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(
+            pointer,
+            static view => THeader.Release(view),
+            length));
     }
 
     /// <summary>
@@ -33,23 +36,9 @@ public static class FlexibleArrayTransfer
     {
         ArgumentNullException.ThrowIfNull(pointer);
         var length = THeader.GetTailElementCount(in *pointer);
-        return new FlexibleArray<THeader, T>(new AdoptedCore<THeader, T>(pointer, length));
-    }
-
-    /// <summary>
-    /// Core for adopted objects: the transferable constraint lets disposal address the
-    /// header-registered release directly with the view the contract declares.
-    /// </summary>
-    internal sealed unsafe class AdoptedCore<THeader, T> : FlexibleArrayCore<THeader, T>
-        where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, ITransferableFlexibleArrayHeader<THeader, T>
-        where T : unmanaged
-    {
-        public AdoptedCore(THeader* pointer, int length)
-            : base(pointer, length)
-        {
-        }
-
-        protected override void ReleaseStorage()
-            => THeader.Release(new FlexibleSpan<THeader, T>(in *Pointer));
+        return new FlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(
+            pointer,
+            static view => THeader.Release(view),
+            length));
     }
 }
