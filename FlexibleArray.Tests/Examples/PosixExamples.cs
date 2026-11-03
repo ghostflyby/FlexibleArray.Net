@@ -68,9 +68,6 @@ internal static partial class DeclarativePosix
     [LibraryImport("libc", EntryPoint = "getcwd")]
     private static partial FlexibleSpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
 
-    [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial nint StrDupRaw(string source);
-
     [LibraryImport("libc", EntryPoint = "free")]
     internal static partial void FreePosix(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring);
 
@@ -108,8 +105,11 @@ internal static partial class RawPosixPInvoke
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
     private static partial nint StrDup(string source);
 
+    [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
+    internal static partial nint StrDupRaw(string source);
+
     [LibraryImport("libc", EntryPoint = "free")]
-    private static partial nint Free(nint pointer);
+    private static partial void Free(nint pointer);
 
     [LibraryImport("libc", EntryPoint = "getcwd")]
     private static partial nint GetCwd(Span<byte> buffer);
@@ -134,7 +134,7 @@ internal static partial class RawPosixPInvoke
         }
         finally
         {
-            _ = Free(copy);
+            Free(copy);
         }
     }
 
@@ -178,7 +178,7 @@ public sealed unsafe class PosixExamples
 
         // A pointer from a legacy binding adopts as writable or read-only and releases
         // through the header policy.
-        var raw = DeclarativePosix.StrDupRaw("hello!");
+        var raw = RawPosixPInvoke.StrDupRaw("hello!");
         Assert.NotEqual(0, raw);
 
         var array =
@@ -203,7 +203,7 @@ public sealed unsafe class PosixExamples
             return;
         }
 
-        var raw = DeclarativePosix.StrDupRaw("readonly!");
+        var raw = RawPosixPInvoke.StrDupRaw("readonly!");
         Assert.NotEqual(0, raw);
 
         using var array =

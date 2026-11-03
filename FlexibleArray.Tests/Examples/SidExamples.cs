@@ -100,7 +100,8 @@ internal static partial class DeclarativeSid
 internal static partial class RawSidPInvoke
 {
     [LibraryImport("advapi32", EntryPoint = "AllocateAndInitializeSid")]
-    internal static partial int AllocateAndInitializeSid(
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AllocateAndInitializeSid(
         in SidIdentifierAuthority authority,
         byte subAuthorityCount,
         uint subAuthority0,
@@ -118,8 +119,8 @@ internal static partial class RawSidPInvoke
 
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
-        if (AllocateAndInitializeSid(
-                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid) == 0)
+        if (!AllocateAndInitializeSid(
+                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid))
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
@@ -200,7 +201,7 @@ public sealed class SidExamples
         // Pointers that arrive outside a declarative signature (legacy DllImport shapes)
         // still adopt and release through the header policy.
         var authority = SidIdentifierAuthority.NtAuthority;
-        Assert.NotEqual(0, RawSidPInvoke.AllocateAndInitializeSid(
+        Assert.True(RawSidPInvoke.AllocateAndInitializeSid(
             authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var raw));
 
         using var sid = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)raw);
