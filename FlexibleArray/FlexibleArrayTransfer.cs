@@ -18,6 +18,7 @@ public static class FlexibleArrayTransfer
     {
         ArgumentNullException.ThrowIfNull(pointer);
         var length = THeader.GetTailElementCount(in *pointer);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
         return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(
             pointer,
             static view => THeader.Release(view),
@@ -36,6 +37,7 @@ public static class FlexibleArrayTransfer
     {
         ArgumentNullException.ThrowIfNull(pointer);
         var length = THeader.GetTailElementCount(in *pointer);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
         return new FlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(
             pointer,
             static view => THeader.Release(view),

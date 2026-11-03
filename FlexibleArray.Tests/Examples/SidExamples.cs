@@ -74,7 +74,8 @@ internal static partial class DeclarativeSid
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
     internal static partial void FreeSid(FlexibleSpan<SidHeader, uint> sid);
 
-    // The OS's own view of the tail, for layout comparison.
+    // The OS's own view of the tail, for layout comparison: the returned pointer stays
+    // anchored in the OS-owned allocation, which needs no pin.
     [LibraryImport("advapi32", EntryPoint = "GetSidSubAuthority")]
     internal static unsafe partial uint* GetSidSubAuthority(MutableFlexibleArray<SidHeader, uint> sid, uint index);
 
@@ -180,13 +181,11 @@ public sealed class SidExamples
 
         using (sid)
         {
-            var array = sid!;
-
             // The OS's own view agrees element for element with the span the declared layout
             // produces, on the same allocation.
-            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(array, 0), array.Span.Elements[0]);
-            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(array, 1), array.Span.Elements[1]);
-            Assert.Equal([11u, 22u], array.Span.Elements);
+            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(sid, 0), sid.Span.Elements[0]);
+            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(sid, 1), sid.Span.Elements[1]);
+            Assert.Equal([11u, 22u], sid.Span.Elements);
         }
     }
 
@@ -208,8 +207,7 @@ public sealed class SidExamples
         Assert.Equal(1, sid.Length);
         Assert.Equal(7u, sid.Span.Elements[0]);
 
-        _ = DeclarativeSid.AllocateAndInitializeSid(authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var declared);
-        Assert.NotNull(declared);
+        Assert.True(DeclarativeSid.AllocateAndInitializeSid(authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var declared));
         using var declaredArray = declared;
         Assert.Equal(declaredArray.Span.Elements, sid.Span.Elements);
     }

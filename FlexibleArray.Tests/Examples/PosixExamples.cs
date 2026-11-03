@@ -103,9 +103,6 @@ internal static partial class RawPosixPInvoke
     private static partial nint GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    private static partial nint StrDup(string source);
-
-    [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial nint StrDupRaw(string source);
 
     [LibraryImport("libc", EntryPoint = "free")]
@@ -122,7 +119,7 @@ internal static partial class RawPosixPInvoke
 
     public static string TransferredCopy(string source)
     {
-        var copy = StrDup(source);
+        var copy = StrDupRaw(source);
         if (copy == 0)
         {
             throw new OutOfMemoryException();

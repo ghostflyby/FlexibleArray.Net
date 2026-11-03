@@ -162,9 +162,9 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         {
             _owner.Dispose();
         }
-        else
+        else if (_release is not null)
         {
-            _release?.Invoke(new FlexibleSpan<THeader, T>(in *_pointer));
+            _release.Invoke(new FlexibleSpan<THeader, T>(in *_pointer));
         }
     }
 }
