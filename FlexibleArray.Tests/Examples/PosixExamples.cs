@@ -39,12 +39,17 @@ public struct ExampleMallocCStringHeader
         return tail.IndexOf((byte)0);
     }
 
-    public static unsafe void Release(scoped ref ExampleMallocCStringHeader header)
+    public static void Release(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring)
     {
-        // The CRT free pairs with the CRT the memory came from. The pointer conversion is the
-        // one unavoidable use: Release receives a header by ref.
-        var pointer = (nint)Unsafe.AsPointer(ref header);
-        _ = OperatingSystem.IsWindows() ? DeclarativePosix.FreeWindows(pointer) : DeclarativePosix.FreePosix(pointer);
+        // The CRT free pairs with the CRT the memory came from.
+        if (OperatingSystem.IsWindows())
+        {
+            DeclarativePosix.FreeWindows(cstring);
+        }
+        else
+        {
+            DeclarativePosix.FreePosix(cstring);
+        }
     }
 }
 
@@ -67,10 +72,10 @@ internal static partial class DeclarativePosix
     internal static partial nint StrDupRaw(string source);
 
     [LibraryImport("libc", EntryPoint = "free")]
-    internal static partial nint FreePosix(nint pointer);
+    internal static partial void FreePosix(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring);
 
     [LibraryImport("ucrtbase", EntryPoint = "free")]
-    internal static partial nint FreeWindows(nint pointer);
+    internal static partial void FreeWindows(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring);
 
     public static string BorrowedEnv(string name)
     {

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace FlexibleArray.Tests.Examples;
@@ -25,11 +24,9 @@ public struct SidHeader
     // The count field IS the tail length.
     public static int GetTailElementCount(scoped in SidHeader header) => header.SubAuthorityCount;
 
-    public static unsafe void Release(scoped ref SidHeader header)
+    public static void Release(FlexibleSpan<SidHeader, uint> sid)
     {
-        // The only unavoidable pointer: Release receives a header by ref, and the native
-        // contract takes an address.
-        _ = DeclarativeSid.FreeSid((nint)Unsafe.AsPointer(ref header));
+        DeclarativeSid.FreeSid(sid);
     }
 }
 
@@ -69,12 +66,14 @@ internal static partial class DeclarativeSid
         uint subAuthority7,
         out MutableFlexibleArray<SidHeader, uint>? sid);
 
+    // FreeSid reports failure only by returning its argument; the release contract has no
+    // failure path, so the declaration drops the return.
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
-    internal static partial nint FreeSid(nint sid);
+    internal static partial void FreeSid(FlexibleSpan<SidHeader, uint> sid);
 
     // The OS's own view of the tail, for layout comparison.
     [LibraryImport("advapi32", EntryPoint = "GetSidSubAuthority")]
-    internal static partial nint GetSidSubAuthority(nint sid, int index);
+    internal static unsafe partial uint* GetSidSubAuthority(MutableFlexibleArray<SidHeader, uint> sid, uint index);
 
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
@@ -184,9 +183,9 @@ public sealed class SidExamples
 
             // The OS agrees with our geometry: its tail pointer equals header + our offset,
             // and the stride arithmetic lands the second element where it should.
-            Assert.Equal(DeclarativeSid.GetSidSubAuthority((nint)pinned.Pointer, 0),
+            Assert.Equal((nint)DeclarativeSid.GetSidSubAuthority(sid!, 0),
                 (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset);
-            Assert.Equal(DeclarativeSid.GetSidSubAuthority((nint)pinned.Pointer, 1),
+            Assert.Equal((nint)DeclarativeSid.GetSidSubAuthority(sid!, 1),
                 (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset + sizeof(uint));
             Assert.Equal([11u, 22u], sid.Span.Elements);
         }

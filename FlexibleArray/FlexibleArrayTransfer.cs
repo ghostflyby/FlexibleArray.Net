@@ -43,6 +43,6 @@ public static class FlexibleArrayTransfer
         where T : unmanaged
     {
         public static void Invoke(void* pointer)
-            => THeader.Release(ref *(THeader*)pointer);
+            => THeader.Release(new FlexibleSpan<THeader, T>(in *(THeader*)pointer));
     }
 }
