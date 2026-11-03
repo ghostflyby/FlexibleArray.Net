@@ -237,6 +237,7 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
     private static int? FieldOffsetOf(IFieldSymbol field)
         => field.GetAttributes()
             .Where(a => a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.FieldOffsetAttribute")
+            // ReSharper disable once MergeIntoPattern
             .Select(a => a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Value is int offset
                 ? offset
                 : (int?)null)
