@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace FlexibleArray.Tests.Examples;
@@ -53,7 +54,8 @@ internal static partial class DeclarativeSid
     internal const int SubAuthorityOffset = 8;
 
     [LibraryImport("advapi32", EntryPoint = "AllocateAndInitializeSid")]
-    internal static partial int AllocateAndInitializeSid(
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AllocateAndInitializeSid(
         in SidIdentifierAuthority authority,
         byte subAuthorityCount,
         uint subAuthority0,
@@ -64,6 +66,7 @@ internal static partial class DeclarativeSid
         uint subAuthority5,
         uint subAuthority6,
         uint subAuthority7,
+        [NotNullWhen(true)]
         out MutableFlexibleArray<SidHeader, uint>? sid);
 
     // FreeSid reports failure only by returning its argument; the release contract has no
@@ -77,15 +80,15 @@ internal static partial class DeclarativeSid
 
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
-        if (AllocateAndInitializeSid(
-                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid) == 0)
+        if (!AllocateAndInitializeSid(
+                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid))
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
 
         using (sid)
         {
-            return [.. sid!.Span.Elements];
+            return [.. sid.Span.Elements];
         }
     }
 }
@@ -171,8 +174,8 @@ public sealed class SidExamples
         }
 
         var authority = SidIdentifierAuthority.NtAuthority;
-        if (DeclarativeSid.AllocateAndInitializeSid(
-                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out var sid) == 0)
+        if (!DeclarativeSid.AllocateAndInitializeSid(
+                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out var sid))
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }

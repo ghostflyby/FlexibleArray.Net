@@ -4,14 +4,13 @@ using System.Runtime.InteropServices;
 
 namespace FlexibleArray;
 
-internal sealed unsafe class FlexibleArrayCore<THeader, T>
+internal unsafe class FlexibleArrayCore<THeader, T>
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
     private readonly ReadOnlyMemory<byte> _memory;
     private readonly IMemoryOwner<byte>? _owner;
-    private readonly THeader* _pointer;
-    private readonly delegate* managed<THeader*, void> _release;
+    protected readonly THeader* Pointer;
     private bool _disposed;
     private int _committedLength;
 
@@ -26,10 +25,9 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         }
     }
 
-    internal FlexibleArrayCore(THeader* pointer, delegate* managed<THeader*, void> release, int length)
+    internal FlexibleArrayCore(THeader* pointer, int length)
     {
-        _pointer = pointer;
-        _release = release;
+        Pointer = pointer;
         _committedLength = length;
     }
 
@@ -46,9 +44,9 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
     {
         get
         {
-            if (_pointer != null)
+            if (Pointer != null)
             {
-                return ref *_pointer;
+                return ref *Pointer;
             }
 
             return ref Unsafe.As<byte, THeader>(ref MemoryMarshal.GetReference(_memory.Span));
@@ -62,7 +60,7 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
     internal MemoryHandle Pin()
     {
         ThrowIfDisposed();
-        return _pointer != null ? new MemoryHandle(_pointer) : _memory.Pin();
+        return Pointer != null ? new MemoryHandle(Pointer) : _memory.Pin();
     }
 
     internal void Dispose()
@@ -160,9 +158,13 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         {
             _owner.Dispose();
         }
-        else if (_release != null)
+        else
         {
-            _release(_pointer);
+            ReleaseStorage();
         }
     }
+
+    // Objects with no owner and no native storage hold nothing; adopted objects route
+    // disposal through the header-registered release.
+    protected virtual void ReleaseStorage() { }
 }
