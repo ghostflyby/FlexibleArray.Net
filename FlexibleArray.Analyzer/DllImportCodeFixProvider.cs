@@ -25,7 +25,7 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
     private const string DllImportAttributeName = "System.Runtime.InteropServices.DllImportAttribute";
 
     public override ImmutableArray<string> FixableDiagnosticIds { get; } =
-        ImmutableArray.Create(DiagnosticId);
+        [DiagnosticId];
 
     private const string DiagnosticId = "FA0004";
 
@@ -43,12 +43,12 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
         foreach (var diagnostic in context.Diagnostics)
         {
             if (root.FindToken(diagnostic.Location.SourceSpan.Start).Parent?.AncestorsAndSelf()
-                .OfType<MethodDeclarationSyntax>().FirstOrDefault() is not { } declaration
+                    .OfType<MethodDeclarationSyntax>().FirstOrDefault() is not { } declaration
                 || declaration.AttributeLists.Count == 0
                 || declaration.AttributeLists.SelectMany(l => l.Attributes)
                     .FirstOrDefault(a => IsDllImport(a, model)) is not { } attribute
                 || !ArgumentsCarryOver(attribute)
-                || model.GetDeclaredSymbol(declaration, context.CancellationToken) is not IMethodSymbol method
+                || model.GetDeclaredSymbol(declaration, context.CancellationToken) is not { } method
                 || !SignatureCarriesOver(method))
             {
                 continue;
@@ -67,17 +67,17 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
     {
         // Binding resolves aliases and user attributes that merely share the suffix.
         return model.GetSymbolInfo(attribute).Symbol is IMethodSymbol
-        {
-            ContainingType: { } attributeType
-        }
-        && attributeType.ToDisplayString() == DllImportAttributeName;
+               {
+                   ContainingType: { } attributeType
+               }
+               && attributeType.ToDisplayString() == DllImportAttributeName;
     }
 
     // The source generator refuses these without an explicit StringMarshalling/MarshalAs that
     // this fix cannot supply, so the rewrite would turn compiling code into a generator error.
     private static bool SignatureCarriesOver(IMethodSymbol method)
         => !NeedsExplicitMarshalling(method.ReturnType)
-        && !method.Parameters.Any(parameter => NeedsExplicitMarshalling(parameter.Type));
+           && !method.Parameters.Any(parameter => NeedsExplicitMarshalling(parameter.Type));
 
     private static bool NeedsExplicitMarshalling(ITypeSymbol type) => NeedsExplicitMarshalling(type, []);
 

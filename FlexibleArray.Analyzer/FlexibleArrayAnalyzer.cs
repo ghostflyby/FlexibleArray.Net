@@ -64,12 +64,13 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
         ImmutableHashSet.Create("FlexibleSpan`2", "MutableFlexibleSpan`2", "FlexibleArray`2", "MutableFlexibleArray`2");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
-        ImmutableArray.Create(
-            GetFirstElementMustReferenceHeaderField,
+    [
+        GetFirstElementMustReferenceHeaderField,
             PlaceholderMustBeLastField,
             AutoLayoutIsNotCCompatible,
             DllImportIgnoresMarshallers,
-            WalkLengthCannotImplementWriteBack);
+            WalkLengthCannotImplementWriteBack
+    ];
 
     public override void Initialize(AnalysisContext context)
     {
@@ -88,7 +89,7 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (LayoutKindOf(StructLayoutAttribute(type)) is int kind && kind == (int)LayoutKind.Auto)
+        if (LayoutKindOf(StructLayoutAttribute(type)) is { } and (int)LayoutKind.Auto)
         {
             context.ReportDiagnostic(Diagnostic.Create(AutoLayoutIsNotCCompatible, type.Locations[0]));
         }
@@ -200,7 +201,7 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
 
                 return;
             default:
-                var lastField = type.GetMembers().OfType<IFieldSymbol>().Where(f => !f.IsStatic).LastOrDefault();
+                var lastField = type.GetMembers().OfType<IFieldSymbol>().LastOrDefault(f => !f.IsStatic);
                 if (lastField is not null && !SymbolEqualityComparer.Default.Equals(lastField, field.Field))
                 {
                     ReportPlaceholderNotLast(context, field.Field);
@@ -223,14 +224,14 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
     // offset is overwritten by the first tail elements.
     private static IFieldSymbol? OverlappingExplicitField(INamedTypeSymbol type, IFieldSymbol placeholder)
     {
-        if (FieldOffsetOf(placeholder) is not int placeholderOffset)
+        if (FieldOffsetOf(placeholder) is not { } placeholderOffset)
         {
             return null;
         }
 
         return type.GetMembers().OfType<IFieldSymbol>()
             .Where(f => !f.IsStatic && !SymbolEqualityComparer.Default.Equals(f, placeholder))
-            .FirstOrDefault(f => FieldOffsetOf(f) is int offset && offset >= placeholderOffset);
+            .FirstOrDefault(f => FieldOffsetOf(f) is { } offset && offset >= placeholderOffset);
     }
 
     private static int? FieldOffsetOf(IFieldSymbol field)
@@ -283,7 +284,7 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
                     return true;
                 }
 
-                return named.TypeArguments.Any(argument => SignatureTouchesFlexibleType(argument));
+                return named.TypeArguments.Any(SignatureTouchesFlexibleType);
             default:
                 return false;
         }

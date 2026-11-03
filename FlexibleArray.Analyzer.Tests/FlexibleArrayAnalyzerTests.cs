@@ -1,11 +1,9 @@
 using System.Collections.Immutable;
-using FlexibleArray.Analyzer;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.CodeAnalysis.Text;
 
 namespace FlexibleArray.Analyzer.Tests;
 
@@ -664,7 +662,7 @@ public sealed class FlexibleArrayAnalyzerTests
         var operations = await action.GetOperationsAsync(TestContext.Current.CancellationToken);
         var changed = operations.OfType<ApplyChangesOperation>().Single().ChangedSolution.GetDocument(document.Id);
         Assert.NotNull(changed);
-        return (await changed!.GetTextAsync()).ToString();
+        return (await changed.GetTextAsync()).ToString();
     }
 
     private static async Task<ImmutableArray<CodeAction>> GetCodeFixActionsAsync(string source)
