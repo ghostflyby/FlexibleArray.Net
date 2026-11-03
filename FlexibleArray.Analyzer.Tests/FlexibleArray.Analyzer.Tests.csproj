@@ -18,8 +18,9 @@
     <PackageReference Include="xunit.v3" Version="4.0.2" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <ProjectReference Include="..\FlexibleArray\FlexibleArray.csproj" />
-    <!-- Both loaded as an analyzer and referenced normally, so the tests can instantiate it. -->
+    <!-- Both loaded as an analyzer and referenced normally, so the tests can instantiate them. -->
     <ProjectReference Include="..\FlexibleArray.Analyzer\FlexibleArray.Analyzer.csproj" OutputItemType="Analyzer" />
+    <ProjectReference Include="..\FlexibleArray.Analyzer.CodeFixes\FlexibleArray.Analyzer.CodeFixes.csproj" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

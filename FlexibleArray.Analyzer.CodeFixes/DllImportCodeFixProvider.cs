@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
 
+// ReSharper disable once CheckNamespace
 namespace FlexibleArray.Analyzer;
 
 /// <summary>

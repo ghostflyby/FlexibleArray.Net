@@ -38,11 +38,18 @@
     <ProjectReference Include="../FlexibleArray.Analyzer/FlexibleArray.Analyzer.csproj"
                       ReferenceOutputAssembly="false"
                       OutputItemType="Analyzer"/>
+    <ProjectReference Include="../FlexibleArray.Analyzer.CodeFixes/FlexibleArray.Analyzer.CodeFixes.csproj"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer"/>
   </ItemGroup>
 
   <Target Name="PackAnalyzers" BeforeTargets="_GetPackageFiles" DependsOnTargets="Build">
     <ItemGroup>
       <None Include="../FlexibleArray.Analyzer/bin/$(Configuration)/netstandard2.0/FlexibleArray.Analyzer.dll"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false"/>
+      <None Include="../FlexibleArray.Analyzer.CodeFixes/bin/$(Configuration)/netstandard2.0/FlexibleArray.Analyzer.CodeFixes.dll"
             Pack="true"
             PackagePath="analyzers/dotnet/cs"
             Visible="false"/>
