@@ -13,7 +13,8 @@ namespace FlexibleArray.Analyzer;
 /// Rewrites a [DllImport] import that declares flexible array types into the source-generated
 /// [LibraryImport] form: the attribute is renamed, and the partial modifiers it requires are
 /// added to the method and its containing type. Offered only when every attribute argument
-/// carries over unchanged (EntryPoint, SetLastError).
+/// carries over unchanged (EntryPoint, SetLastError) and the signature needs no explicit
+/// marshalling that this fix cannot supply.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(DllImportCodeFixProvider)), Shared]
 public sealed class DllImportCodeFixProvider : CodeFixProvider
@@ -21,8 +22,12 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
     private static readonly ImmutableHashSet<string> PortableArguments =
         ImmutableHashSet.Create("EntryPoint", "SetLastError");
 
+    private const string DllImportAttributeName = "System.Runtime.InteropServices.DllImportAttribute";
+
     public override ImmutableArray<string> FixableDiagnosticIds { get; } =
-        ImmutableArray.Create("FA0004");
+        ImmutableArray.Create(DiagnosticId);
+
+    private const string DiagnosticId = "FA0004";
 
     public override FixAllProvider GetFixAllProvider() => WellKnownFixAllProviders.BatchFixer;
 
@@ -42,7 +47,9 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
                 || declaration.AttributeLists.Count == 0
                 || declaration.AttributeLists.SelectMany(l => l.Attributes)
                     .FirstOrDefault(a => IsDllImport(a, model)) is not { } attribute
-                || !ArgumentsCarryOver(attribute))
+                || !ArgumentsCarryOver(attribute)
+                || model.GetDeclaredSymbol(declaration, context.CancellationToken) is not IMethodSymbol method
+                || !SignatureCarriesOver(method))
             {
                 continue;
             }
@@ -58,12 +65,46 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
 
     private static bool IsDllImport(AttributeSyntax attribute, SemanticModel model)
     {
-        // The syntactic name is authoritative here: the fixer runs on a document that may not
-        // have a fully bound compilation, and the analyzer's own diagnostic already
-        // established that this attribute is DllImport.
-        var name = attribute.Name.ToString();
-        return name.EndsWith("DllImport", StringComparison.Ordinal)
-            || name.EndsWith("DllImportAttribute", StringComparison.Ordinal);
+        // Binding resolves aliases and user attributes that merely share the suffix.
+        return model.GetSymbolInfo(attribute).Symbol is IMethodSymbol
+        {
+            ContainingType: { } attributeType
+        }
+        && attributeType.ToDisplayString() == DllImportAttributeName;
+    }
+
+    // The source generator refuses these without an explicit StringMarshalling/MarshalAs that
+    // this fix cannot supply, so the rewrite would turn compiling code into a generator error.
+    private static bool SignatureCarriesOver(IMethodSymbol method)
+        => !NeedsExplicitMarshalling(method.ReturnType)
+        && !method.Parameters.Any(parameter => NeedsExplicitMarshalling(parameter.Type));
+
+    private static bool NeedsExplicitMarshalling(ITypeSymbol type) => NeedsExplicitMarshalling(type, []);
+
+    private static bool NeedsExplicitMarshalling(ITypeSymbol type, HashSet<ITypeSymbol> visited)
+    {
+        if (type.SpecialType is SpecialType.System_String
+            or SpecialType.System_Char
+            or SpecialType.System_Boolean
+            or SpecialType.System_Object
+            or SpecialType.System_Decimal)
+        {
+            return true;
+        }
+
+        if (type is IArrayTypeSymbol array)
+        {
+            return NeedsExplicitMarshalling(array.ElementType, visited);
+        }
+
+        // Only fields of structs are inlined into the signature; a reference type never is.
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Struct } named || !visited.Add(named))
+        {
+            return false;
+        }
+
+        return named.GetMembers().OfType<IFieldSymbol>()
+            .Any(field => !field.IsStatic && NeedsExplicitMarshalling(field.Type, visited));
     }
 
     private static bool ArgumentsCarryOver(AttributeSyntax attribute)
@@ -103,20 +144,34 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
             editor.ReplaceNode(declaration, (node, _) =>
             {
                 var method = (MethodDeclarationSyntax)node;
-                return method.WithModifiers(method.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.PartialKeyword)));
+                // A partial method may not be extern: the source generator supplies the
+                // implementation the extern modifier stood for.
+                var modifiers = method.Modifiers.Where(token => !token.IsKind(SyntaxKind.ExternKeyword))
+                    .Append(PartialToken());
+                return method.WithModifiers(SyntaxFactory.TokenList(modifiers));
             });
         }
 
-        if (declaration.Parent is BaseTypeDeclarationSyntax { } type
-            && !type.Modifiers.Any(SyntaxKind.PartialKeyword))
+        // Every type in the nesting chain must be partial, or the generated implementation
+        // declaration has no home.
+        foreach (var typeDeclaration in declaration.Ancestors().OfType<BaseTypeDeclarationSyntax>())
         {
-            editor.ReplaceNode(type, (node, _) =>
+            if (typeDeclaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+            {
+                continue;
+            }
+
+            editor.ReplaceNode(typeDeclaration, (node, _) =>
             {
                 var declarationType = (BaseTypeDeclarationSyntax)node;
-                return declarationType.WithModifiers(declarationType.Modifiers.Add(SyntaxFactory.Token(SyntaxKind.PartialKeyword)));
+                return declarationType.WithModifiers(declarationType.Modifiers.Add(PartialToken()));
             });
         }
 
         return editor.GetChangedDocument();
     }
+
+    // The trailing space keeps the following return type or keyword separated.
+    private static SyntaxToken PartialToken()
+        => SyntaxFactory.Token(SyntaxKind.PartialKeyword).WithTrailingTrivia(SyntaxFactory.Space);
 }

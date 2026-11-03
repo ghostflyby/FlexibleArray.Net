@@ -17,9 +17,6 @@ public sealed class FlexibleArrayAnalyzerTests
 
         """;
 
-    // The code fix keys on the id alone; this is the descriptor the analyzer reports FA0004 with.
-    private static DiagnosticDescriptor DiagnosticDescriptorsDllImport => FlexibleArrayAnalyzer.DllImportDescriptor;
-
     [Fact]
     public async Task CompliantCountFieldHeader_ProducesNoDiagnostics()
     {
@@ -56,17 +53,17 @@ public sealed class FlexibleArrayAnalyzerTests
     }
 
     [Fact]
-    public async Task GetFirstElementOfWrongElementType_ReportsFA0001()
+    public async Task GetFirstElementWithFieldAfterPlaceholder_ReportsFA0002()
     {
         var source = HeaderPrelude + """
-            struct WrongElementHeader : IFlexibleArrayHeader<WrongElementHeader, int>
+            struct TrailingFieldHeader : IFlexibleArrayHeader<TrailingFieldHeader, int>
             {
                 public int Count;
                 public int FirstElement;
                 public long NotAnElement;
 
-                public static ref int GetFirstElement(ref WrongElementHeader header) => ref header.FirstElement;
-                public static int GetTailElementCount(scoped in WrongElementHeader header) => header.Count;
+                public static ref int GetFirstElement(ref TrailingFieldHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in TrailingFieldHeader header) => header.Count;
             }
             """;
 
@@ -92,14 +89,14 @@ public sealed class FlexibleArrayAnalyzerTests
     }
 
     [Fact]
-    public async Task ExplicitLayout_SkipsThePlacementCheck()
+    public async Task ExplicitLayoutWithNoOverlap_ProducesNoDiagnostics()
     {
         var source = HeaderPrelude + """
             [StructLayout(LayoutKind.Explicit)]
             struct ExplicitHeader : IFlexibleArrayHeader<ExplicitHeader, int>
             {
-                [FieldOffset(0)] public int FirstElement;
-                [FieldOffset(8)] public int Count;
+                [FieldOffset(0)] public int Count;
+                [FieldOffset(8)] public int FirstElement;
 
                 public static ref int GetFirstElement(ref ExplicitHeader header) => ref header.FirstElement;
                 public static int GetTailElementCount(scoped in ExplicitHeader header) => header.Count;
@@ -107,6 +104,24 @@ public sealed class FlexibleArrayAnalyzerTests
             """;
 
         await VerifyNoDiagnosticsAsync(source);
+    }
+
+    [Fact]
+    public async Task ExplicitLayoutWithOverlappingField_ReportsFA0002()
+    {
+        var source = HeaderPrelude + """
+            [StructLayout(LayoutKind.Explicit)]
+            struct OverlappingHeader : IFlexibleArrayHeader<OverlappingHeader, int>
+            {
+                [FieldOffset(0)] public int FirstElement;
+                [FieldOffset(8)] public int Count;
+
+                public static ref int GetFirstElement(ref OverlappingHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in OverlappingHeader header) => header.Count;
+            }
+            """;
+
+        await VerifyDiagnosticsAsync(source, ("FA0002", 6, 33));
     }
 
     [Fact]
@@ -140,6 +155,86 @@ public sealed class FlexibleArrayAnalyzerTests
     }
 
     [Fact]
+    public async Task WalkLengthWithTwoCalls_ReportsFA0005Once()
+    {
+        var source = HeaderPrelude + """
+            using System.Runtime.CompilerServices;
+
+            struct DoubleWalkHeader
+                : IFlexibleArrayHeader<DoubleWalkHeader, int>, IConstructibleFlexibleArrayHeader<DoubleWalkHeader, int>
+            {
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref DoubleWalkHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in DoubleWalkHeader header)
+                {
+                    ref var h = ref Unsafe.AsRef(in header);
+                    var length = 0;
+                    while (Unsafe.Add(ref GetFirstElement(ref h), length) != 0)
+                    {
+                        length++;
+                    }
+
+                    return length + Unsafe.Add(ref GetFirstElement(ref h), length);
+                }
+                public DoubleWalkHeader WithTailElementCount(int count) => this;
+            }
+            """;
+
+        await VerifyDiagnosticsAsync(source, ("FA0005", 11, 23));
+    }
+
+    [Fact]
+    public async Task WalkOverAnotherHeadersPlaceholder_ProducesNoDiagnostics()
+    {
+        var source = HeaderPrelude + """
+            struct OtherHeader : IFlexibleArrayHeader<OtherHeader, int>
+            {
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref OtherHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in OtherHeader header) => 0;
+            }
+
+            struct ComposingHeader
+                : IFlexibleArrayHeader<ComposingHeader, int>, IConstructibleFlexibleArrayHeader<ComposingHeader, int>
+            {
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ComposingHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ComposingHeader header)
+                {
+                    var other = default(OtherHeader);
+                    _ = OtherHeader.GetFirstElement(ref other);
+                    return 0;
+                }
+                public ComposingHeader WithTailElementCount(int count) => this;
+            }
+            """;
+
+        await VerifyNoDiagnosticsAsync(source);
+    }
+
+    [Fact]
+    public async Task SameNamedUnrelatedMethod_ProducesNoDiagnostics()
+    {
+        var source = HeaderPrelude + """
+            struct CountHeader : IFlexibleArrayHeader<CountHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref CountHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in CountHeader header) => header.Count;
+
+                public static ref int GetFirstElement(ref CountHeader header, int slot) => ref header.FirstElement;
+            }
+            """;
+
+        await VerifyNoDiagnosticsAsync(source);
+    }
+
+    [Fact]
     public async Task WalkLengthWithoutWriteBack_ProducesNoDiagnostics()
     {
         var source = HeaderPrelude + """
@@ -161,6 +256,62 @@ public sealed class FlexibleArrayAnalyzerTests
 
                     return length;
                 }
+            }
+            """;
+
+        await VerifyNoDiagnosticsAsync(source);
+    }
+
+    [Fact]
+    public async Task GetFirstElementThroughStaticStorage_ReportsFA0001()
+    {
+        var source = HeaderPrelude + """
+            struct SharedHeader : IFlexibleArrayHeader<SharedHeader, int>
+            {
+                public static SharedHeader Shared;
+
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref SharedHeader header) => ref Shared.FirstElement;
+                public static int GetTailElementCount(scoped in SharedHeader header) => header.Count;
+            }
+            """;
+
+        await VerifyDiagnosticsAsync(source, ("FA0001", 10, 27));
+    }
+
+    [Fact]
+    public async Task GetFirstElementThroughAutoPropertyAfterPlaceholder_ReportsFA0002()
+    {
+        var source = HeaderPrelude + """
+            struct TrailingPropertyHeader : IFlexibleArrayHeader<TrailingPropertyHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+                public long NotAnElement { get; set; }
+
+                public static ref int GetFirstElement(ref TrailingPropertyHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in TrailingPropertyHeader header) => header.Count;
+            }
+            """;
+
+        await VerifyDiagnosticsAsync(source, ("FA0002", 6, 16));
+    }
+
+    [Fact]
+    public async Task ExplicitContractImplementation_ProducesNoDiagnostics()
+    {
+        var source = HeaderPrelude + """
+            struct ExplicitHeader : IFlexibleArrayHeader<ExplicitHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                static ref int IFlexibleArrayHeader<ExplicitHeader, int>.GetFirstElement(ref ExplicitHeader header)
+                    => ref header.FirstElement;
+                static int IFlexibleArrayHeader<ExplicitHeader, int>.GetTailElementCount(scoped in ExplicitHeader header)
+                    => header.Count;
             }
             """;
 
@@ -230,8 +381,6 @@ public sealed class FlexibleArrayAnalyzerTests
     [Fact]
     public async Task LibraryImportWithFlexibleParameter_ProducesNoDiagnostics()
     {
-        // The generated implementation is out of scope here, so the import is written as a
-        // plain (non-partial) extern method: the analyzer keys on DllImport, not on the form.
         var source = HeaderPrelude + """
             struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
             {
@@ -256,8 +405,6 @@ public sealed class FlexibleArrayAnalyzerTests
     public async Task DllImportCodeFix_RewritesToLibraryImport()
     {
         var source = HeaderPrelude + """
-            using System.Runtime.CompilerServices;
-
             struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
             {
                 public int Count;
@@ -274,11 +421,161 @@ public sealed class FlexibleArrayAnalyzerTests
             }
             """;
 
-        var fixedSource = await ApplyFixAsync(source, "FA0004");
-        Assert.Contains("LibraryImport", fixedSource);
-        Assert.DoesNotContain("DllImport", fixedSource);
+        var fixedSource = await ApplyFixAsync(source);
+
+        Assert.Contains("[global::System.Runtime.InteropServices.LibraryImport(\"native\", EntryPoint = \"read\")]", fixedSource);
+        Assert.DoesNotContain("[DllImport", fixedSource);
         Assert.Contains("partial class Native", fixedSource);
-        Assert.Contains("partial int Count", fixedSource);
+        Assert.Contains("internal static partial int Count(", fixedSource);
+        Assert.DoesNotContain("extern", fixedSource);
+        // The LibraryImport generator is absent in this harness, so the only remaining error is
+        // the expected missing implementation declaration of the rewritten partial method.
+        Assert.All(
+            CreateCompilation(fixedSource).GetDiagnostics(TestContext.Current.CancellationToken)
+                .Where(d => d.Severity == DiagnosticSeverity.Error),
+            error => Assert.Equal("CS8795", error.Id));
+    }
+
+    [Fact]
+    public async Task DllImportCodeFix_OffersNothingForStringSignature()
+    {
+        var source = HeaderPrelude + """
+            struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ImportHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ImportHeader header) => header.Count;
+            }
+
+            static class Native
+            {
+                [DllImport("native")]
+                internal static extern int Open(string path, FlexibleSpan<ImportHeader, int> view);
+            }
+            """;
+
+        Assert.Empty(await GetCodeFixActionsAsync(source));
+    }
+
+    [Fact]
+    public async Task DllImportCodeFix_OffersNothingForNonPortableArgument()
+    {
+        var source = HeaderPrelude + """
+            struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ImportHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ImportHeader header) => header.Count;
+            }
+
+            static class Native
+            {
+                [DllImport("native", CharSet = CharSet.Unicode)]
+                internal static extern int Count(FlexibleSpan<ImportHeader, int> view);
+            }
+            """;
+
+        Assert.Empty(await GetCodeFixActionsAsync(source));
+    }
+
+    [Fact]
+    public async Task DllImportCodeFix_FollowsAnAliasedAttribute()
+    {
+        var source = HeaderPrelude + """
+            using DI = System.Runtime.InteropServices.DllImportAttribute;
+
+            struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ImportHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ImportHeader header) => header.Count;
+            }
+
+            static class Native
+            {
+                [DI("native")]
+                internal static extern int Count(FlexibleSpan<ImportHeader, int> view);
+            }
+            """;
+
+        var fixedSource = await ApplyFixAsync(source);
+
+        Assert.Contains("[global::System.Runtime.InteropServices.LibraryImport(\"native\")]", fixedSource);
+        // Only the missing generated implementation is expected without the generator.
+        Assert.All(
+            CreateCompilation(fixedSource).GetDiagnostics(TestContext.Current.CancellationToken)
+                .Where(d => d.Severity == DiagnosticSeverity.Error),
+            error => Assert.Equal("CS8795", error.Id));
+    }
+
+    [Fact]
+    public async Task DllImportCodeFix_LeavesASameNamedUserAttributeAlone()
+    {
+        var source = HeaderPrelude + """
+            sealed class FooDllImportAttribute : System.Attribute { }
+
+            struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ImportHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ImportHeader header) => header.Count;
+            }
+
+            static class Native
+            {
+                [FooDllImport]
+                [DllImport("native")]
+                internal static extern int Count(FlexibleSpan<ImportHeader, int> view);
+            }
+            """;
+
+        var fixedSource = await ApplyFixAsync(source);
+
+        Assert.Contains("[FooDllImport]", fixedSource);
+        Assert.Contains("[global::System.Runtime.InteropServices.LibraryImport(\"native\")]", fixedSource);
+    }
+
+    [Fact]
+    public async Task DllImportCodeFix_MakesTheWholeNestingChainPartial()
+    {
+        var source = HeaderPrelude + """
+            struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ImportHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ImportHeader header) => header.Count;
+            }
+
+            static class Outer
+            {
+                static class Native
+                {
+                    [DllImport("native")]
+                    internal static extern int Count(FlexibleSpan<ImportHeader, int> view);
+                }
+            }
+            """;
+
+        var fixedSource = await ApplyFixAsync(source);
+
+        Assert.Contains("static partial class Outer", fixedSource);
+        Assert.Contains("static partial class Native", fixedSource);
+        Assert.Contains("internal static partial int Count(", fixedSource);
+        Assert.DoesNotContain("extern", fixedSource);
+        Assert.All(
+            CreateCompilation(fixedSource).GetDiagnostics(TestContext.Current.CancellationToken)
+                .Where(d => d.Severity == DiagnosticSeverity.Error),
+            error => Assert.Equal("CS8795", error.Id));
     }
 
     private static async Task VerifyNoDiagnosticsAsync(string source)
@@ -313,7 +610,24 @@ public sealed class FlexibleArrayAnalyzerTests
         return await withAnalyzers.GetAnalyzerDiagnosticsAsync();
     }
 
-    private static async Task<string> ApplyFixAsync(string source, string diagnosticId)
+    private static async Task<string> ApplyFixAsync(string source)
+    {
+        var (document, _, actions) = await RegisterCodeFixActionsAsync(source);
+        var action = Assert.Single(actions);
+
+        var operations = await action.GetOperationsAsync(TestContext.Current.CancellationToken);
+        var changed = operations.OfType<ApplyChangesOperation>().Single().ChangedSolution.GetDocument(document.Id);
+        Assert.NotNull(changed);
+        return (await changed!.GetTextAsync()).ToString();
+    }
+
+    private static async Task<ImmutableArray<CodeAction>> GetCodeFixActionsAsync(string source)
+    {
+        var (_, _, actions) = await RegisterCodeFixActionsAsync(source);
+        return actions.ToImmutableArray();
+    }
+
+    private static async Task<(Document Document, ImmutableArray<Diagnostic> Diagnostics, List<CodeAction> Actions)> RegisterCodeFixActionsAsync(string source)
     {
         using var workspace = new AdhocWorkspace();
         var project = workspace.AddProject("TestProject", LanguageNames.CSharp)
@@ -322,29 +636,14 @@ public sealed class FlexibleArrayAnalyzerTests
             .AddMetadataReferences(CreateReferences());
         var document = project.AddDocument("Test.cs", source);
 
-        var model = await document.GetSemanticModelAsync(TestContext.Current.CancellationToken);
-        Assert.NotNull(model);
-
-        // The diagnostic comes from the analyzer, not from the compiler, so it is built here
-        // with the span the analyzer would report.
-        var method = model!.SyntaxTree.GetRoot(TestContext.Current.CancellationToken)
-            .DescendantNodes()
-            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
-            .Single(m => m.Identifier.ValueText == "Count");
-        var target = Diagnostic.Create(
-            DiagnosticDescriptorsDllImport,
-            method.Identifier.GetLocation());
+        var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
+        var target = diagnostics.Single(d => d.Id == "FA0004");
 
         var actions = new List<CodeAction>();
         var context = new CodeFixContext(
             document, target, (a, _) => actions.Add(a), TestContext.Current.CancellationToken);
         await new DllImportCodeFixProvider().RegisterCodeFixesAsync(context);
-        var action = Assert.Single(actions);
-
-        var operations = await action.GetOperationsAsync(CancellationToken.None);
-        var changed = operations.OfType<ApplyChangesOperation>().Single().ChangedSolution.GetDocument(document.Id);
-        Assert.NotNull(changed);
-        return (await changed!.GetTextAsync()).ToString();
+        return (document, diagnostics, actions);
     }
 
     private static CSharpCompilation CreateCompilation(string source)
@@ -354,8 +653,6 @@ public sealed class FlexibleArrayAnalyzerTests
             CreateReferences(),
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
 
-    // The full trusted-platform set: partial reference lists cannot resolve unmanaged
-    // constraints, and the analyzer must see the same surface a consumer compile sees.
     private static IEnumerable<MetadataReference> CreateReferences()
     {
         var trustedAssemblies = (string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!;

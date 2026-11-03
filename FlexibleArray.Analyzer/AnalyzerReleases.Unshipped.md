@@ -1,6 +1,10 @@
-; Each release of analyzers should document what rules were released, and if rules have changed, broken or been removed.
-; To register a new rule, add a line: Rule ID | Category | Severity | HelpLink (optional) | Title
+; Unshipped analyzer release
+; https://github.com/dotnet/roslyn-analyzers/blob/main/src/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
+### New Rules
+
+Rule ID | Category | Severity | Notes
+--------|----------|----------|-------
 FA0001 | FlexibleArray | Error | GetFirstElement must return a reference to an instance field of the header type
 FA0002 | FlexibleArray | Error | The first-element placeholder must be the last instance field
 FA0003 | FlexibleArray | Error | LayoutKind.Auto produces no C-compatible layout

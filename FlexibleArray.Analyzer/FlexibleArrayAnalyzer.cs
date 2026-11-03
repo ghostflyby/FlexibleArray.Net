@@ -27,7 +27,7 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor PlaceholderMustBeLastField = new(
         "FA0002",
         "The first-element placeholder must be the last instance field",
-        "The field '{0}' returned by GetFirstElement must be the last declared instance field: under sequential layout the tail starts at the placeholder, so a later field would be overlapped",
+        "The field '{0}' returned by GetFirstElement must be the last instance field: the tail starts at that field, so any field at or after it would be overlapped",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -63,9 +63,6 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
     private static readonly ImmutableHashSet<string> FlexibleTypeNames =
         ImmutableHashSet.Create("FlexibleSpan`2", "MutableFlexibleSpan`2", "FlexibleArray`2", "MutableFlexibleArray`2");
 
-    /// <summary>Gets the descriptor for the DllImport diagnostic, for tooling that offers its fix.</summary>
-    internal static DiagnosticDescriptor DllImportDescriptor => DllImportIgnoresMarshallers;
-
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get; } =
         ImmutableArray.Create(
             GetFirstElementMustReferenceHeaderField,
@@ -91,19 +88,25 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var layout = type.GetAttributes().FirstOrDefault(a =>
-            a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.StructLayoutAttribute");
-        if (LayoutKindOf(layout) is int kind && kind == (int)LayoutKind.Auto)
+        if (LayoutKindOf(StructLayoutAttribute(type)) is int kind && kind == (int)LayoutKind.Auto)
         {
             context.ReportDiagnostic(Diagnostic.Create(AutoLayoutIsNotCCompatible, type.Locations[0]));
         }
     }
 
-    // MetadataName carries no namespace, so the contract namespace is checked separately.
+    // MetadataName carries no namespace, so the contract namespace is checked separately. A
+    // type that implements the contract at two instantiations is resolved through its own
+    // self argument, which fixes which tail element type the checks compare against.
     private static INamedTypeSymbol? FindInterface(INamedTypeSymbol type, string metadataName)
-        => type.AllInterfaces.FirstOrDefault(i =>
-            i.OriginalDefinition.MetadataName == metadataName
-            && i.OriginalDefinition.ContainingNamespace.ToDisplayString() == ContractNamespace);
+    {
+        var candidates = type.AllInterfaces.Where(i => Matches(i, metadataName)).ToImmutableArray();
+        return candidates.FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], type))
+            ?? candidates.FirstOrDefault();
+    }
+
+    private static bool Matches(INamedTypeSymbol interfaceType, string metadataName)
+        => interfaceType.OriginalDefinition.MetadataName == metadataName
+            && interfaceType.OriginalDefinition.ContainingNamespace.ToDisplayString() == ContractNamespace;
 
     private static void AnalyzeContractBody(OperationBlockStartAnalysisContext context)
     {
@@ -117,27 +120,46 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
         var type = method.ContainingType;
         var element = contract.TypeArguments[1];
 
-        if (method.Name == "GetFirstElement")
+        if (method.Name == "GetFirstElement"
+            && ContractImplementation(type, contract, "GetFirstElement") is { } placeholderMember
+            && SymbolEqualityComparer.Default.Equals(placeholderMember, method))
         {
             context.RegisterOperationAction(
                 operationContext => AnalyzeFirstElementReturn(operationContext, method, type, element),
                 OperationKind.Return);
         }
         else if (method.Name == "GetTailElementCount"
-            && FindInterface(type, ConstructibleContractName) is not null)
+            && FindInterface(type, ConstructibleContractName) is not null
+            && ContractImplementation(type, contract, "GetTailElementCount") is { } countMember
+            && SymbolEqualityComparer.Default.Equals(countMember, method))
         {
+            // Only this type's own placeholder member counts: another header's same-named
+            // method is unrelated, and reporting it would reject valid composing headers.
+            var ownGetFirstElement = ContractImplementation(type, contract, "GetFirstElement");
+            var reported = false;
+
             context.RegisterOperationAction(
                 operationContext =>
                 {
-                    if (operationContext.Operation is IInvocationOperation { TargetMethod.Name: "GetFirstElement" })
+                    if (reported
+                        || operationContext.Operation is not IInvocationOperation invocation
+                        || !SymbolEqualityComparer.Default.Equals(invocation.TargetMethod, ownGetFirstElement))
                     {
-                        operationContext.ReportDiagnostic(Diagnostic.Create(
-                            WalkLengthCannotImplementWriteBack, method.Locations[0]));
+                        return;
                     }
+
+                    reported = true;
+                    operationContext.ReportDiagnostic(Diagnostic.Create(
+                        WalkLengthCannotImplementWriteBack, method.Locations[0]));
                 },
                 OperationKind.Invocation);
         }
     }
+
+    private static IMethodSymbol? ContractImplementation(INamedTypeSymbol type, INamedTypeSymbol contract, string memberName)
+        => contract.GetMembers(memberName).OfType<IMethodSymbol>().FirstOrDefault() is { } member
+            ? type.FindImplementationForInterfaceMember(member) as IMethodSymbol
+            : null;
 
     private static void AnalyzeFirstElementReturn(
         OperationAnalysisContext context,
@@ -153,7 +175,8 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
         if (returned is not IFieldReferenceOperation field
             || !SymbolEqualityComparer.Default.Equals(field.Field.ContainingType, type)
             || field.Field.IsStatic
-            || !SymbolEqualityComparer.Default.Equals(field.Field.Type, element))
+            || !SymbolEqualityComparer.Default.Equals(field.Field.Type, element)
+            || IsStaticStorage(field.Instance))
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 GetFirstElementMustReferenceHeaderField,
@@ -163,35 +186,72 @@ public sealed class FlexibleArrayAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (LayoutKindOf(StructLayoutAttribute(type)) is int layout && layout == (int)LayoutKind.Explicit)
+        var layout = StructLayoutAttribute(type);
+        switch (LayoutKindOf(layout))
         {
-            return;
-        }
+            case (int)LayoutKind.Auto:
+                // Reordering makes the declared order meaningless; FA0003 reports the layout.
+                return;
+            case (int)LayoutKind.Explicit:
+                if (OverlappingExplicitField(type, field.Field) is not null)
+                {
+                    ReportPlaceholderNotLast(context, field.Field);
+                }
 
-        var lastField = type.GetMembers().OfType<IFieldSymbol>().Where(f => !f.IsStatic).LastOrDefault();
-        if (lastField is not null && !SymbolEqualityComparer.Default.Equals(lastField, field.Field))
-        {
-            context.ReportDiagnostic(Diagnostic.Create(
-                PlaceholderMustBeLastField,
-                field.Field.Locations[0],
-                field.Field.Name));
+                return;
+            default:
+                var lastField = type.GetMembers().OfType<IFieldSymbol>().Where(f => !f.IsStatic).LastOrDefault();
+                if (lastField is not null && !SymbolEqualityComparer.Default.Equals(lastField, field.Field))
+                {
+                    ReportPlaceholderNotLast(context, field.Field);
+                }
+
+                return;
         }
     }
+
+    // A receiver that is itself a static field points into shared storage, not the caller's
+    // header, so the measured tail offset would describe a different location.
+    private static bool IsStaticStorage(IOperation? instance)
+        => instance is IFieldReferenceOperation { Field.IsStatic: true };
+
+    private static void ReportPlaceholderNotLast(OperationAnalysisContext context, IFieldSymbol placeholder)
+        => context.ReportDiagnostic(Diagnostic.Create(
+            PlaceholderMustBeLastField, placeholder.Locations[0], placeholder.Name));
+
+    // The tail begins at the placeholder's offset, so an instance field at or above that
+    // offset is overwritten by the first tail elements.
+    private static IFieldSymbol? OverlappingExplicitField(INamedTypeSymbol type, IFieldSymbol placeholder)
+    {
+        if (FieldOffsetOf(placeholder) is not int placeholderOffset)
+        {
+            return null;
+        }
+
+        return type.GetMembers().OfType<IFieldSymbol>()
+            .Where(f => !f.IsStatic && !SymbolEqualityComparer.Default.Equals(f, placeholder))
+            .FirstOrDefault(f => FieldOffsetOf(f) is int offset && offset >= placeholderOffset);
+    }
+
+    private static int? FieldOffsetOf(IFieldSymbol field)
+        => field.GetAttributes()
+            .Where(a => a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.FieldOffsetAttribute")
+            .Select(a => a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Value is int offset
+                ? offset
+                : (int?)null)
+            .FirstOrDefault();
 
     private static AttributeData? StructLayoutAttribute(INamedTypeSymbol type)
         => type.GetAttributes().FirstOrDefault(a =>
             a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.StructLayoutAttribute");
 
     private static int? LayoutKindOf(AttributeData? attribute)
-    {
-        if (attribute is null || attribute.ConstructorArguments.Length == 0)
+        => attribute?.ConstructorArguments.FirstOrDefault().Value switch
         {
-            return null;
-        }
-
-        var value = attribute.ConstructorArguments[0].Value;
-        return value is int raw ? raw : (int)(LayoutKind)value!;
-    }
+            int raw => raw,
+            LayoutKind kind => (int)kind,
+            _ => null,
+        };
 
     private static void AnalyzeImport(SymbolAnalysisContext context)
     {
