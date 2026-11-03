@@ -207,5 +207,10 @@ public sealed class SidExamples
         using var sid = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)raw);
         Assert.Equal(1, sid.Length);
         Assert.Equal(7u, sid.Span.Elements[0]);
+
+        _ = DeclarativeSid.AllocateAndInitializeSid(authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var declared);
+        Assert.NotNull(declared);
+        using var declaredArray = declared;
+        Assert.Equal(declaredArray.Span.Elements, sid.Span.Elements);
     }
 }

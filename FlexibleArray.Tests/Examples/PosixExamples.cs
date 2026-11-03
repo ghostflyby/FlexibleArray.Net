@@ -63,7 +63,7 @@ internal static partial class DeclarativePosix
     private static partial FlexibleSpan<ExampleCStrHeader, byte> GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    private static partial MutableFlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
+    internal static partial MutableFlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
 
     [LibraryImport("libc", EntryPoint = "getcwd")]
     private static partial FlexibleSpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
@@ -185,6 +185,8 @@ public sealed unsafe class PosixExamples
             FlexibleArrayTransfer.Adopt<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(6, array.Length);
         Assert.Equal("hello!"u8.ToArray(), array.Span.Elements.ToArray());
+        using var declared = DeclarativePosix.StrDup("hello!");
+        Assert.Equal(declared.Span.Elements.ToArray(), array.Span.Elements.ToArray());
 
         // Adopted storage has no known extent: capacity collapses to the declared length,
         // so no free region is exposed.
@@ -210,6 +212,8 @@ public sealed unsafe class PosixExamples
             FlexibleArrayTransfer.AdoptReadOnly<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(9, array.Length);
         Assert.Equal("readonly!"u8.ToArray(), array.Span.Elements.ToArray());
+        using var declared = DeclarativePosix.StrDup("readonly!");
+        Assert.Equal(declared.Span.Elements.ToArray(), array.Span.Elements.ToArray());
     }
 
     [Fact]
