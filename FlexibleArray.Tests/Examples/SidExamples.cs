@@ -116,9 +116,6 @@ internal static partial class RawSidPInvoke
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
     internal static partial nint FreeSid(nint sid);
 
-    [LibraryImport("advapi32", EntryPoint = "GetSidSubAuthority")]
-    internal static partial nint GetSidSubAuthority(nint sid, int index);
-
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
         if (AllocateAndInitializeSid(
