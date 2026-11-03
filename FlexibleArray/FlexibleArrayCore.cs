@@ -10,8 +10,8 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
 {
     private readonly ReadOnlyMemory<byte> _memory;
     private readonly IMemoryOwner<byte>? _owner;
-    private readonly void* _pointer;
-    private readonly delegate* managed<void*, void> _release;
+    private readonly THeader* _pointer;
+    private readonly delegate* managed<THeader*, void> _release;
     private bool _disposed;
     private int _committedLength;
 
@@ -26,7 +26,7 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         }
     }
 
-    internal FlexibleArrayCore(void* pointer, delegate* managed<void*, void> release, int length)
+    internal FlexibleArrayCore(THeader* pointer, delegate* managed<THeader*, void> release, int length)
     {
         _pointer = pointer;
         _release = release;
@@ -48,7 +48,7 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         {
             if (_pointer != null)
             {
-                return ref *(THeader*)_pointer;
+                return ref *_pointer;
             }
 
             return ref Unsafe.As<byte, THeader>(ref MemoryMarshal.GetReference(_memory.Span));

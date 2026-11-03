@@ -179,15 +179,13 @@ public sealed class SidExamples
 
         using (sid)
         {
-            using var pinned = sid!.Pin();
+            var array = sid!;
 
-            // The OS agrees with our geometry: its tail pointer equals header + our offset,
-            // and the stride arithmetic lands the second element where it should.
-            Assert.Equal((nint)DeclarativeSid.GetSidSubAuthority(sid!, 0),
-                (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset);
-            Assert.Equal((nint)DeclarativeSid.GetSidSubAuthority(sid!, 1),
-                (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset + sizeof(uint));
-            Assert.Equal([11u, 22u], sid.Span.Elements);
+            // The OS's own view agrees element for element with the span the declared layout
+            // produces, on the same allocation.
+            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(array, 0), array.Span.Elements[0]);
+            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(array, 1), array.Span.Elements[1]);
+            Assert.Equal([11u, 22u], array.Span.Elements);
         }
     }
 

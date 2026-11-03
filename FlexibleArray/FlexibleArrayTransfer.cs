@@ -42,7 +42,7 @@ public static class FlexibleArrayTransfer
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, ITransferableFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
-        public static void Invoke(void* pointer)
-            => THeader.Release(new FlexibleSpan<THeader, T>(in *(THeader*)pointer));
+        public static void Invoke(THeader* pointer)
+            => THeader.Release(new FlexibleSpan<THeader, T>(in *pointer));
     }
 }
