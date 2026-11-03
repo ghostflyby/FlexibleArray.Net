@@ -617,7 +617,7 @@ public sealed class FlexibleArrayAnalyzerTests
 
     private static async Task VerifyNoDiagnosticsAsync(string source)
     {
-        await AssertCompilesAsync(source);
+        AssertCompiles(source);
         var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
         Assert.True(diagnostics.IsEmpty,
             diagnostics.Length > 0 ? $"Expected no diagnostics, got: {diagnostics[0].Id} at {diagnostics[0].Location.GetLineSpan()}" : "");
@@ -625,7 +625,7 @@ public sealed class FlexibleArrayAnalyzerTests
 
     private static async Task VerifyDiagnosticsAsync(string source, params (string Id, int Line, int Column)[] expected)
     {
-        await AssertCompilesAsync(source);
+        AssertCompiles(source);
         var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
         var actual = diagnostics
             .Select(d =>
@@ -643,11 +643,11 @@ public sealed class FlexibleArrayAnalyzerTests
     private static async Task<ImmutableArray<Diagnostic>> GetAnalyzerDiagnosticsAsync(string source)
     {
         var compilation = CreateCompilation(source);
-        var withAnalyzers = compilation.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new FlexibleArrayAnalyzer()));
+        var withAnalyzers = compilation.WithAnalyzers([new FlexibleArrayAnalyzer()]);
         return await withAnalyzers.GetAnalyzerDiagnosticsAsync();
     }
 
-    private static async Task AssertCompilesAsync(string source)
+    private static void AssertCompiles(string source)
     {
         var errors = CreateCompilation(source).GetDiagnostics(TestContext.Current.CancellationToken)
             .Where(d => d.Severity == DiagnosticSeverity.Error);
@@ -680,7 +680,7 @@ public sealed class FlexibleArrayAnalyzerTests
             .AddMetadataReferences(CreateReferences());
         var document = project.AddDocument("Test.cs", source);
 
-        await AssertCompilesAsync(source);
+        AssertCompiles(source);
         var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
         var target = diagnostics.Single(d => d.Id == "FA0004");
 
