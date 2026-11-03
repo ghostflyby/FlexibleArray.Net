@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace FlexibleArray.Tests.Examples;
@@ -25,11 +25,9 @@ public struct SidHeader
     // The count field IS the tail length.
     public static int GetTailElementCount(scoped in SidHeader header) => header.SubAuthorityCount;
 
-    public static unsafe void Release(scoped ref SidHeader header)
+    public static void Release(FlexibleSpan<SidHeader, uint> sid)
     {
-        // The only unavoidable pointer: Release receives a header by ref, and the native
-        // contract takes an address.
-        _ = DeclarativeSid.FreeSid((nint)Unsafe.AsPointer(ref header));
+        DeclarativeSid.FreeSid(sid);
     }
 }
 
@@ -56,7 +54,8 @@ internal static partial class DeclarativeSid
     internal const int SubAuthorityOffset = 8;
 
     [LibraryImport("advapi32", EntryPoint = "AllocateAndInitializeSid")]
-    internal static partial int AllocateAndInitializeSid(
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AllocateAndInitializeSid(
         in SidIdentifierAuthority authority,
         byte subAuthorityCount,
         uint subAuthority0,
@@ -67,26 +66,30 @@ internal static partial class DeclarativeSid
         uint subAuthority5,
         uint subAuthority6,
         uint subAuthority7,
+        [NotNullWhen(true)]
         out MutableFlexibleArray<SidHeader, uint>? sid);
 
+    // FreeSid reports failure only by returning its argument; the release contract has no
+    // failure path, so the declaration drops the return.
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
-    internal static partial nint FreeSid(nint sid);
+    internal static partial void FreeSid(FlexibleSpan<SidHeader, uint> sid);
 
-    // The OS's own view of the tail, for layout comparison.
+    // The OS's own view of the tail, for layout comparison: the returned pointer stays
+    // anchored in the OS-owned allocation, which needs no pin.
     [LibraryImport("advapi32", EntryPoint = "GetSidSubAuthority")]
-    internal static partial nint GetSidSubAuthority(nint sid, int index);
+    internal static unsafe partial uint* GetSidSubAuthority(MutableFlexibleArray<SidHeader, uint> sid, uint index);
 
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
-        if (AllocateAndInitializeSid(
-                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid) == 0)
+        if (!AllocateAndInitializeSid(
+                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid))
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
 
         using (sid)
         {
-            return [.. sid!.Span.Elements];
+            return [.. sid.Span.Elements];
         }
     }
 }
@@ -98,7 +101,8 @@ internal static partial class DeclarativeSid
 internal static partial class RawSidPInvoke
 {
     [LibraryImport("advapi32", EntryPoint = "AllocateAndInitializeSid")]
-    internal static partial int AllocateAndInitializeSid(
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AllocateAndInitializeSid(
         in SidIdentifierAuthority authority,
         byte subAuthorityCount,
         uint subAuthority0,
@@ -114,13 +118,10 @@ internal static partial class RawSidPInvoke
     [LibraryImport("advapi32", EntryPoint = "FreeSid")]
     internal static partial nint FreeSid(nint sid);
 
-    [LibraryImport("advapi32", EntryPoint = "GetSidSubAuthority")]
-    internal static partial nint GetSidSubAuthority(nint sid, int index);
-
     public static uint[] ReadSubAuthorities(in SidIdentifierAuthority authority, byte count)
     {
-        if (AllocateAndInitializeSid(
-                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid) == 0)
+        if (!AllocateAndInitializeSid(
+                authority, count, 0x11, 0x22, 0x33, 0, 0, 0, 0, 0, out var sid))
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
@@ -172,22 +173,18 @@ public sealed class SidExamples
         }
 
         var authority = SidIdentifierAuthority.NtAuthority;
-        if (DeclarativeSid.AllocateAndInitializeSid(
-                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out var sid) == 0)
+        if (!DeclarativeSid.AllocateAndInitializeSid(
+                authority, 2, 11, 22, 0, 0, 0, 0, 0, 0, out var sid))
         {
             throw new InvalidOperationException("AllocateAndInitializeSid failed");
         }
 
         using (sid)
         {
-            using var pinned = sid!.Pin();
-
-            // The OS agrees with our geometry: its tail pointer equals header + our offset,
-            // and the stride arithmetic lands the second element where it should.
-            Assert.Equal(DeclarativeSid.GetSidSubAuthority((nint)pinned.Pointer, 0),
-                (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset);
-            Assert.Equal(DeclarativeSid.GetSidSubAuthority((nint)pinned.Pointer, 1),
-                (nint)pinned.Pointer + DeclarativeSid.SubAuthorityOffset + sizeof(uint));
+            // The OS's own view agrees element for element with the span the declared layout
+            // produces, on the same allocation.
+            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(sid, 0), sid.Span.Elements[0]);
+            Assert.Equal(*DeclarativeSid.GetSidSubAuthority(sid, 1), sid.Span.Elements[1]);
             Assert.Equal([11u, 22u], sid.Span.Elements);
         }
     }
@@ -203,11 +200,15 @@ public sealed class SidExamples
         // Pointers that arrive outside a declarative signature (legacy DllImport shapes)
         // still adopt and release through the header policy.
         var authority = SidIdentifierAuthority.NtAuthority;
-        Assert.NotEqual(0, RawSidPInvoke.AllocateAndInitializeSid(
+        Assert.True(RawSidPInvoke.AllocateAndInitializeSid(
             authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var raw));
 
         using var sid = FlexibleArrayTransfer.Adopt<SidHeader, uint>((SidHeader*)raw);
         Assert.Equal(1, sid.Length);
         Assert.Equal(7u, sid.Span.Elements[0]);
+
+        Assert.True(DeclarativeSid.AllocateAndInitializeSid(authority, 1, 7, 0, 0, 0, 0, 0, 0, 0, out var declared));
+        using var declaredArray = declared;
+        Assert.Equal(declaredArray.Span.Elements, sid.Span.Elements);
     }
 }

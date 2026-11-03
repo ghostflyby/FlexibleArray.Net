@@ -10,9 +10,11 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
 {
     private readonly ReadOnlyMemory<byte> _memory;
     private readonly IMemoryOwner<byte>? _owner;
-    private readonly void* _pointer;
-    private readonly delegate* managed<void*, void> _release;
-    private bool _disposed;
+    private readonly Action<FlexibleSpan<THeader, T>>? _release;
+    private readonly THeader* _pointer;
+
+    // Negative stores the bitwise complement of the committed length, which also marks the
+    // object as disposed; zero is a valid length, so the sign is the only free channel.
     private int _committedLength;
 
     internal FlexibleArrayCore(ReadOnlyMemory<byte> buffer, int length, IMemoryOwner<byte>? owner)
@@ -26,10 +28,10 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         }
     }
 
-    internal FlexibleArrayCore(void* pointer, delegate* managed<void*, void> release, int length)
+    internal FlexibleArrayCore(THeader* pointer, Action<FlexibleSpan<THeader, T>> release, int length)
     {
-        _pointer = pointer;
         _release = release;
+        _pointer = pointer;
         _committedLength = length;
     }
 
@@ -48,16 +50,16 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         {
             if (_pointer != null)
             {
-                return ref *(THeader*)_pointer;
+                return ref *_pointer;
             }
 
             return ref Unsafe.As<byte, THeader>(ref MemoryMarshal.GetReference(_memory.Span));
         }
     }
 
-    internal bool IsDisposed => _disposed;
+    internal bool IsDisposed => _committedLength < 0;
 
-    internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+    internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_committedLength < 0, this);
 
     internal MemoryHandle Pin()
     {
@@ -150,19 +152,19 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
 
     private void Release()
     {
-        if (_disposed)
+        if (_committedLength < 0)
         {
             return;
         }
 
-        _disposed = true;
+        _committedLength = ~_committedLength;
         if (_owner is not null)
         {
             _owner.Dispose();
         }
-        else if (_release != null)
+        else if (_release is not null)
         {
-            _release(_pointer);
+            _release.Invoke(new FlexibleSpan<THeader, T>(in *_pointer));
         }
     }
 }

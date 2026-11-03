@@ -22,11 +22,27 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     }
 
     /// <summary>Gets the committed number of tail elements.</summary>
-    public int Length => _core.CommittedLength;
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public int Length
+    {
+        get
+        {
+            _core.ThrowIfDisposed();
+            return _core.CommittedLength;
+        }
+    }
 
     /// <summary>Gets the element capacity of the backing storage; adopted native objects report their committed length.</summary>
     /// <remarks>Can exceed the committed count: header padding and pool-rental rounding are usable.</remarks>
-    public int Capacity => _core.Capacity;
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public int Capacity
+    {
+        get
+        {
+            _core.ThrowIfDisposed();
+            return _core.Capacity;
+        }
+    }
 
     /// <summary>Gets the writable region between the committed length and the capacity, for in-place construction before <see cref="Advance"/>.</summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>

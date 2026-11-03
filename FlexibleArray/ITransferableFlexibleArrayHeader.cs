@@ -15,7 +15,8 @@ public interface ITransferableFlexibleArrayHeader<TSelf, T>
     where TSelf : unmanaged, IFlexibleArrayHeader<TSelf, T>, ITransferableFlexibleArrayHeader<TSelf, T>
     where T : unmanaged
 {
-    /// <summary>Releases the complete object whose header is at the given location.</summary>
+    /// <summary>Releases the complete object the given view anchors.</summary>
+    /// <param name="view">A read-only view over the complete object to release.</param>
     /// <remarks>The storage is invalid after this call returns.</remarks>
-    protected internal static abstract void Release(scoped ref TSelf header);
+    protected internal static abstract void Release(FlexibleSpan<TSelf, T> view);
 }

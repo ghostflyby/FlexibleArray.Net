@@ -39,12 +39,17 @@ public struct ExampleMallocCStringHeader
         return tail.IndexOf((byte)0);
     }
 
-    public static unsafe void Release(scoped ref ExampleMallocCStringHeader header)
+    public static void Release(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring)
     {
-        // The CRT free pairs with the CRT the memory came from. The pointer conversion is the
-        // one unavoidable use: Release receives a header by ref.
-        var pointer = (nint)Unsafe.AsPointer(ref header);
-        _ = OperatingSystem.IsWindows() ? DeclarativePosix.FreeWindows(pointer) : DeclarativePosix.FreePosix(pointer);
+        // The CRT free pairs with the CRT the memory came from.
+        if (OperatingSystem.IsWindows())
+        {
+            DeclarativePosix.FreeWindows(cstring);
+        }
+        else
+        {
+            DeclarativePosix.FreePosix(cstring);
+        }
     }
 }
 
@@ -58,19 +63,16 @@ internal static partial class DeclarativePosix
     private static partial FlexibleSpan<ExampleCStrHeader, byte> GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    private static partial MutableFlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
+    internal static partial MutableFlexibleArray<ExampleMallocCStringHeader, byte> StrDup(string source);
 
     [LibraryImport("libc", EntryPoint = "getcwd")]
     private static partial FlexibleSpan<ExampleCStrHeader, byte> GetCwd(Span<byte> buffer);
 
-    [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    internal static partial nint StrDupRaw(string source);
-
     [LibraryImport("libc", EntryPoint = "free")]
-    internal static partial nint FreePosix(nint pointer);
+    internal static partial void FreePosix(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring);
 
     [LibraryImport("ucrtbase", EntryPoint = "free")]
-    internal static partial nint FreeWindows(nint pointer);
+    internal static partial void FreeWindows(FlexibleSpan<ExampleMallocCStringHeader, byte> cstring);
 
     public static string BorrowedEnv(string name)
     {
@@ -101,10 +103,10 @@ internal static partial class RawPosixPInvoke
     private static partial nint GetEnv(string name);
 
     [LibraryImport("libc", EntryPoint = "strdup", StringMarshalling = StringMarshalling.Utf8)]
-    private static partial nint StrDup(string source);
+    internal static partial nint StrDupRaw(string source);
 
     [LibraryImport("libc", EntryPoint = "free")]
-    private static partial nint Free(nint pointer);
+    private static partial void Free(nint pointer);
 
     [LibraryImport("libc", EntryPoint = "getcwd")]
     private static partial nint GetCwd(Span<byte> buffer);
@@ -117,7 +119,7 @@ internal static partial class RawPosixPInvoke
 
     public static string TransferredCopy(string source)
     {
-        var copy = StrDup(source);
+        var copy = StrDupRaw(source);
         if (copy == 0)
         {
             throw new OutOfMemoryException();
@@ -129,7 +131,7 @@ internal static partial class RawPosixPInvoke
         }
         finally
         {
-            _ = Free(copy);
+            Free(copy);
         }
     }
 
@@ -173,13 +175,15 @@ public sealed unsafe class PosixExamples
 
         // A pointer from a legacy binding adopts as writable or read-only and releases
         // through the header policy.
-        var raw = DeclarativePosix.StrDupRaw("hello!");
+        var raw = RawPosixPInvoke.StrDupRaw("hello!");
         Assert.NotEqual(0, raw);
 
         var array =
             FlexibleArrayTransfer.Adopt<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(6, array.Length);
         Assert.Equal("hello!"u8.ToArray(), array.Span.Elements.ToArray());
+        using var declared = DeclarativePosix.StrDup("hello!");
+        Assert.Equal(declared.Span.Elements.ToArray(), array.Span.Elements.ToArray());
 
         // Adopted storage has no known extent: capacity collapses to the declared length,
         // so no free region is exposed.
@@ -198,13 +202,15 @@ public sealed unsafe class PosixExamples
             return;
         }
 
-        var raw = DeclarativePosix.StrDupRaw("readonly!");
+        var raw = RawPosixPInvoke.StrDupRaw("readonly!");
         Assert.NotEqual(0, raw);
 
         using var array =
             FlexibleArrayTransfer.AdoptReadOnly<ExampleMallocCStringHeader, byte>((ExampleMallocCStringHeader*)raw);
         Assert.Equal(9, array.Length);
         Assert.Equal("readonly!"u8.ToArray(), array.Span.Elements.ToArray());
+        using var declared = DeclarativePosix.StrDup("readonly!");
+        Assert.Equal(declared.Span.Elements.ToArray(), array.Span.Elements.ToArray());
     }
 
     [Fact]
