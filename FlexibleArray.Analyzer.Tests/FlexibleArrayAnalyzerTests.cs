@@ -544,6 +544,45 @@ public sealed class FlexibleArrayAnalyzerTests
     }
 
     [Fact]
+    public async Task DllImportCodeFix_SurvivesABareDllImportAttribute()
+    {
+        var source = HeaderPrelude + """
+            struct ImportHeader : IFlexibleArrayHeader<ImportHeader, int>
+            {
+                public int Count;
+                public int FirstElement;
+
+                public static ref int GetFirstElement(ref ImportHeader header) => ref header.FirstElement;
+                public static int GetTailElementCount(scoped in ImportHeader header) => header.Count;
+            }
+
+            static class Native
+            {
+                [DllImport]
+                internal static extern int Count(FlexibleSpan<ImportHeader, int> view);
+            }
+            """;
+
+        using var workspace = new AdhocWorkspace();
+        var project = workspace.AddProject("TestProject", LanguageNames.CSharp)
+            .WithCompilationOptions(new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true))
+            .WithParseOptions(new CSharpParseOptions(LanguageVersion.Latest))
+            .AddMetadataReferences(CreateReferences());
+        var document = project.AddDocument("Test.cs", source);
+
+        // The bare attribute is a compiler error (CS7036), and analyzers run on error code.
+        var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
+        var target = diagnostics.Single(d => d.Id == "FA0004");
+
+        var actions = new List<CodeAction>();
+        var context = new CodeFixContext(
+            document, target, (a, _) => actions.Add(a), TestContext.Current.CancellationToken);
+        await new DllImportCodeFixProvider().RegisterCodeFixesAsync(context);
+
+        Assert.Empty(actions);
+    }
+
+    [Fact]
     public async Task DllImportCodeFix_MakesTheWholeNestingChainPartial()
     {
         var source = HeaderPrelude + """
@@ -580,6 +619,7 @@ public sealed class FlexibleArrayAnalyzerTests
 
     private static async Task VerifyNoDiagnosticsAsync(string source)
     {
+        await AssertCompilesAsync(source);
         var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
         Assert.True(diagnostics.IsEmpty,
             diagnostics.Length > 0 ? $"Expected no diagnostics, got: {diagnostics[0].Id} at {diagnostics[0].Location.GetLineSpan()}" : "");
@@ -587,6 +627,7 @@ public sealed class FlexibleArrayAnalyzerTests
 
     private static async Task VerifyDiagnosticsAsync(string source, params (string Id, int Line, int Column)[] expected)
     {
+        await AssertCompilesAsync(source);
         var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
         var actual = diagnostics
             .Select(d =>
@@ -604,10 +645,15 @@ public sealed class FlexibleArrayAnalyzerTests
     private static async Task<ImmutableArray<Diagnostic>> GetAnalyzerDiagnosticsAsync(string source)
     {
         var compilation = CreateCompilation(source);
-        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
-
         var withAnalyzers = compilation.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new FlexibleArrayAnalyzer()));
         return await withAnalyzers.GetAnalyzerDiagnosticsAsync();
+    }
+
+    private static async Task AssertCompilesAsync(string source)
+    {
+        var errors = CreateCompilation(source).GetDiagnostics(TestContext.Current.CancellationToken)
+            .Where(d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Empty(errors);
     }
 
     private static async Task<string> ApplyFixAsync(string source)
@@ -636,6 +682,7 @@ public sealed class FlexibleArrayAnalyzerTests
             .AddMetadataReferences(CreateReferences());
         var document = project.AddDocument("Test.cs", source);
 
+        await AssertCompilesAsync(source);
         var diagnostics = await GetAnalyzerDiagnosticsAsync(source);
         var target = diagnostics.Single(d => d.Id == "FA0004");
 

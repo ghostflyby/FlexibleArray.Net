@@ -109,7 +109,14 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
 
     private static bool ArgumentsCarryOver(AttributeSyntax attribute)
     {
-        foreach (var argument in attribute.ArgumentList!.Arguments)
+        // A bare attribute binds no constructor and keeps its missing dll name after the
+        // rewrite, so there is nothing to offer.
+        if (attribute.ArgumentList is not { } argumentList)
+        {
+            return false;
+        }
+
+        foreach (var argument in argumentList.Arguments)
         {
             // A positional argument is the library name, which LibraryImport takes in the
             // same position; named arguments must be ones both attributes share.
