@@ -68,9 +68,9 @@ public sealed class DllImportCodeFixProvider : CodeFixProvider
     {
         // Binding resolves aliases and user attributes that merely share the suffix.
         return model.GetSymbolInfo(attribute).Symbol is IMethodSymbol
-               {
-                   ContainingType: { } attributeType
-               }
+        {
+            ContainingType: { } attributeType
+        }
                && attributeType.ToDisplayString() == DllImportAttributeName;
     }
 
