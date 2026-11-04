@@ -16,7 +16,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void Marshaller_PinsHeaderAndTailForTheCall()
     {
         using var array = new MutableFlexibleArray<PacketHeader, int>(
-            new PacketHeader { Count = 2, Timestamp = 7 }, [5, 6]);
+            new PacketHeader { Timestamp = 7 }, [5, 6]);
 
         FlexibleArrayMarshaller<PacketHeader, int>.ClassMarshaller marshaller = default;
         marshaller.FromManaged(array);
@@ -51,7 +51,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             () => marshaller.FromManaged((FlexibleArray<PacketHeader, int>)null!));
 
         var array = new MutableFlexibleArray<PacketHeader, int>(
-            new PacketHeader { Count = 0 }, ReadOnlySpan<int>.Empty);
+            new PacketHeader(), ReadOnlySpan<int>.Empty);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => marshaller.FromManaged(array));
     }
@@ -101,7 +101,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         }
 
         using var array = new MutableFlexibleArray<PacketHeader, int>(
-            new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
+            new PacketHeader { Timestamp = 12345 }, [10, 20]);
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
         _ = new MutableFlexibleSpan<PacketHeader, int>(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
@@ -189,7 +189,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void ClassMarshaller_PinsReadOnlyObjectsForTheCall()
     {
         using var array = new MutableFlexibleArray<PacketHeader, int>(
-            new PacketHeader { Count = 1, Timestamp = 3 }, [6]);
+            new PacketHeader { Timestamp = 3 }, [6]);
         FlexibleArray<PacketHeader, int> readOnly = array;
 
         FlexibleArrayMarshaller<PacketHeader, int>.ClassMarshaller marshaller = default;
@@ -232,7 +232,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         }
 
         using var array = new MutableFlexibleArray<PacketHeader, int>(
-            new PacketHeader { Count = 2, Timestamp = 77 }, [30, 40]);
+            new PacketHeader { Timestamp = 77 }, [30, 40]);
         FlexibleSpan<PacketHeader, int> view = array.Span;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
@@ -274,7 +274,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         }
 
         using var array = new MutableFlexibleArray<PacketHeader, int>(
-            new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
+            new PacketHeader { Timestamp = 12345 }, [10, 20]);
         FlexibleArray<PacketHeader, int> readOnly = array;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
