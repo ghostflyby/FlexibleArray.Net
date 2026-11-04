@@ -38,6 +38,7 @@ public sealed class MutableFlexibleArrayTests
             new PacketHeader(), [3, 4]);
 
         Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2), requested);
+        Assert.Equal(2, array.Header.Count);
         Assert.Equal(new[] { 3, 4 }, array.Span.Elements.ToArray());
         // The object was built directly in the caller's storage; element 0 lives at offset 16.
         Assert.Equal(3, BitConverter.ToInt32(storage.Span[16..]));
@@ -50,6 +51,7 @@ public sealed class MutableFlexibleArrayTests
         using var array = new MutableFlexibleArray<PacketHeader, int>(
             buffer, new PacketHeader(), [8, 9]);
 
+        Assert.Equal(2, array.Header.Count);
         Assert.Equal(new[] { 8, 9 }, array.Span.Elements.ToArray());
         Assert.Equal(8, BitConverter.ToInt32(buffer.Span[16..]));
     }
@@ -140,7 +142,7 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
+    public void Wrap_ReadOnlyOverExistingMemory_ReadsTail()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
         _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [4, 5, 6]);
@@ -155,7 +157,7 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void ReadOnlyCreate_OnFormedBuffer_RejectsInvalidDerivedLengths()
+    public void Wrap_ReadOnlyOnFormedBuffer_RejectsInvalidDerivedLengths()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
         var span = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [4, 5]);
@@ -189,13 +191,17 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void Construct_FromPool_DisposeReturnsTheRental()
     {
+        var pool = new TrackingPool();
         var array = new MutableFlexibleArray<PacketHeader, int>(
-            MemoryPool<byte>.Shared, new PacketHeader { Timestamp = 4 }, [1, 2, 3]);
+            pool, new PacketHeader { Timestamp = 4 }, [1, 2, 3]);
 
         Assert.Equal(3, array.Length);
+        Assert.Equal(3, array.Header.Count);
         Assert.Equal(new[] { 1, 2, 3 }, array.Span.Elements.ToArray());
+        Assert.Equal(0, pool.Returned);
 
         array.Dispose();
+        Assert.Equal(1, pool.Returned);
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Span; });
         array.Dispose();
     }
@@ -388,5 +394,37 @@ public sealed class MutableFlexibleArrayTests
 
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => array.Pin());
+    }
+
+    private sealed class TrackingPool : MemoryPool<byte>
+    {
+        public int Returned { get; private set; }
+
+        public override int MaxBufferSize => int.MaxValue;
+
+        public override IMemoryOwner<byte> Rent(int minBufferSize = -1)
+            => new TrackingOwner(new byte[Math.Max(minBufferSize, 1)], () => Returned++);
+
+        protected override void Dispose(bool disposing)
+        {
+        }
+
+        private sealed class TrackingOwner(byte[] buffer, Action onDispose) : IMemoryOwner<byte>
+        {
+            private byte[]? _buffer = buffer;
+
+            public Memory<byte> Memory => _buffer ?? Memory<byte>.Empty;
+
+            public void Dispose()
+            {
+                if (_buffer is null)
+                {
+                    return;
+                }
+
+                _buffer = null;
+                onDispose();
+            }
+        }
     }
 }

@@ -70,9 +70,9 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     }
 
     /// <summary>
-    /// Rents storage from the pool, builds the complete object in it, and returns a writable
-    /// object whose disposal returns the rental — or the finalizer does, as a leak safety net.
-    /// The tail length is derived from the element count.
+    /// Rents storage from the pool and builds the complete object in it: disposal returns the
+    /// rental, and the finalizer does as a leak safety net. The tail length is derived from
+    /// the element count.
     /// </summary>
     /// <remarks>
     /// Pools guarantee no particular alignment: headers requiring more than the shared pool's
@@ -109,7 +109,8 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
 
     /// <summary>
     /// Builds a complete object over an existing buffer; alignment is the buffer's
-    /// responsibility. The tail length is derived from the element count.
+    /// responsibility, and so is the storage's lifetime — disposal never releases it. The
+    /// tail length is derived from the element count.
     /// </summary>
     /// <exception cref="ArgumentException">
     /// The buffer is too short, or a header without a registered write-back declares a tail
@@ -216,12 +217,6 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
                 ref _core.HeaderReference, Length, Length, _core);
         }
     }
-
-    /// <summary>
-    /// Returns a copy of this object that releases the given owner's storage when disposed.
-    /// </summary>
-    internal MutableFlexibleArray<THeader, T> WithOwner(IMemoryOwner<byte> owner)
-        => new(new FlexibleArrayCore<THeader, T>(_core.Buffer, Length, owner));
 
     internal MemoryHandle Pin() => _core.Pin();
 
