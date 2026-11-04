@@ -72,6 +72,7 @@ public sealed class FlexibleArray<THeader, T> : IDisposable
     /// Counts the full header even when the tail is empty, so consecutive objects laid out at
     /// this boundary do not overlap. Protocol alignment between objects is not included.
     /// </remarks>
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
     public int ByteLength => FlexibleArrayLayout<THeader, T>.GetRequiredBytes(Length);
 
     /// <summary>Gets a read-only reference to the header.</summary>

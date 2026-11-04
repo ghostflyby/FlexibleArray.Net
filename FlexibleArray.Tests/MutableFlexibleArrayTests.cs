@@ -137,15 +137,16 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
     {
-        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [4, 5]);
+        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [4, 5, 6]);
 
         using var memory =
             FlexibleArray<PacketHeader, int>.Create(buffer);
 
-        Assert.Equal(2, memory.Length);
-        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2), memory.ByteLength);
-        Assert.Equal(new[] { 4, 5 }, memory.Span.Elements.ToArray());
+        Assert.Equal(3, memory.Length);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), memory.ByteLength);
+        Assert.NotEqual(FlexibleArrayLayout<PacketHeader, int>.HeaderSize, memory.ByteLength);
+        Assert.Equal(new[] { 4, 5, 6 }, memory.Span.Elements.ToArray());
     }
 
     [Fact]

@@ -107,8 +107,8 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// tail, for nested objects built in place, and updates the header's length field.
     /// </summary>
     /// <remarks>
-    /// The caller advances past the bytes it wrote, so the committed count is the nested
-    /// object's byte extent rounded up to whatever alignment the protocol requires.
+    /// The caller advances past the elements it wrote: for a byte tail that is the nested
+    /// object's extent rounded up to whatever alignment the protocol requires.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="elementCount"/> is negative or exceeds the free capacity.

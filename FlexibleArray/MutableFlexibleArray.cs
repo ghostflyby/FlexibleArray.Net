@@ -63,8 +63,8 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// tail, for nested objects built in place, and updates the header's length field.
     /// </summary>
     /// <remarks>
-    /// The caller advances past the bytes it wrote, so the committed count is the nested
-    /// object's byte extent rounded up to whatever alignment the protocol requires.
+    /// The caller advances past the elements it wrote: for a byte tail that is the nested
+    /// object's extent rounded up to whatever alignment the protocol requires.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
@@ -220,6 +220,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// Counts the full header even when the tail is empty, so consecutive objects laid out at
     /// this boundary do not overlap. Protocol alignment between objects is not included.
     /// </remarks>
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
     public int ByteLength => FlexibleArrayLayout<THeader, T>.GetRequiredBytes(Length);
 
     /// <summary>Gets a writable projection of the committed object.</summary>

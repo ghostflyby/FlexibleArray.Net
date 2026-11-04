@@ -11,13 +11,14 @@ public sealed class FlexibleSpanBufferTests
     [Fact]
     public void Create_CountField_ReadsLengthFromHeader()
     {
-        var buffer = BuildPacket(2, 7, 8);
+        var buffer = BuildPacket(3, 7, 8, 9);
 
         var view = FlexibleSpan<PacketHeader, int>.Create(buffer);
-        Assert.Equal(2, view.Length);
-        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2), view.ByteLength);
-        Assert.Equal(new[] { 7, 8 }, view.Elements.ToArray());
-        Assert.Equal(2, view.Header.Count);
+        Assert.Equal(3, view.Length);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), view.ByteLength);
+        Assert.NotEqual(FlexibleArrayLayout<PacketHeader, int>.HeaderSize, view.ByteLength);
+        Assert.Equal(new[] { 7, 8, 9 }, view.Elements.ToArray());
+        Assert.Equal(3, view.Header.Count);
     }
 
     [Fact]
