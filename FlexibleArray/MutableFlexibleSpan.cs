@@ -173,6 +173,25 @@ public ref struct MutableFlexibleSpan<THeader, T>
     }
 
     /// <summary>
+    /// Creates a view over a buffer that already holds a complete object: the buffer is not
+    /// written, the tail length is derived from the header contract, and the capacity is the
+    /// buffer's element capacity. Alignment is not validated.
+    /// </summary>
+    /// <exception cref="ArgumentException">The buffer is shorter than the header.</exception>
+    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer)
+    {
+        if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
+        {
+            throw new ArgumentException(
+                $"The buffer needs at least {FlexibleArrayLayout<THeader, T>.HeaderSize} bytes but has {buffer.Length}.", nameof(buffer));
+        }
+
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
+        ref var header = ref Unsafe.As<byte, THeader>(ref firstByte);
+        return new MutableFlexibleSpan<THeader, T>(ref header, THeader.GetTailElementCount(in header), ElementCapacity(buffer.Length));
+    }
+
+    /// <summary>
     /// Builds a complete object at the start of the buffer; alignment is the buffer's
     /// responsibility. The tail length is derived from the element count — stamped when the
     /// header registers a write-back, read from the declared length field otherwise.

@@ -53,6 +53,19 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
+    public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
+    {
+        Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        _ = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [8, 9]);
+
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer);
+
+        Assert.Equal(2, array.Length);
+        Assert.Equal(2, array.Capacity);
+        Assert.Equal(new[] { 8, 9 }, array.Span.Elements.ToArray());
+    }
+
+    [Fact]
     public void Create_RejectsInvalidAllocatorResultsAndCountMismatch()
     {
         Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(

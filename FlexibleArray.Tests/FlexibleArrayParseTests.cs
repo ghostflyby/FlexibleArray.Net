@@ -19,6 +19,18 @@ public sealed class FlexibleArrayParseTests
     }
 
     [Fact]
+    public void Create_CountField_ReadsLengthFromHeader()
+    {
+        var buffer = BuildPacket(2, 7, 8);
+
+        var view = FlexibleSpan<PacketHeader, int>.Create(buffer);
+
+        Assert.Equal(2, view.Length);
+        Assert.Equal(new[] { 7, 8 }, view.Elements.ToArray());
+        Assert.Equal(2, view.Header.Count);
+    }
+
+    [Fact]
     public void TryParse_SentinelWalk_StopsAtTerminatorWithinCapacity()
     {
         var buffer = new byte[FlexibleArrayLayout<SentinelHeader, int>.GetRequiredBytes(3)];

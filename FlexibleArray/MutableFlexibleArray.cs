@@ -190,6 +190,26 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
         return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(memory, 0, owner: null));
     }
 
+    /// <summary>
+    /// Creates a writable object over a buffer that already holds a complete object: the
+    /// buffer is not written, and the tail length is derived from the header contract.
+    /// Alignment is not validated.
+    /// </summary>
+    /// <exception cref="ArgumentException">The buffer is shorter than the header.</exception>
+    public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer)
+    {
+        if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
+        {
+            throw new ArgumentException(
+                $"The buffer needs at least {FlexibleArrayLayout<THeader, T>.HeaderSize} bytes but has {buffer.Length}.", nameof(buffer));
+        }
+
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer.Span);
+        ref var header = ref Unsafe.As<byte, THeader>(ref firstByte);
+        var length = THeader.GetTailElementCount(in header);
+        return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(buffer, length, owner: null));
+    }
+
     /// <summary>Converts the object to its writable projection; a null object yields a default, empty view.</summary>
     public static implicit operator MutableFlexibleSpan<THeader, T>(MutableFlexibleArray<THeader, T>? array)
         => array is null ? default : array.Span;

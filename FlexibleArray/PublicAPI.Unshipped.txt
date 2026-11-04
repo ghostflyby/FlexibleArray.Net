@@ -43,10 +43,7 @@ FlexibleArray.FlexibleArrayMarshaller<THeader, T>.WritableSpanMarshaller
 FlexibleArray.FlexibleArrayOwnedMarshaller<THeader, T>
 static FlexibleArray.FlexibleArrayMarshaller<THeader, T>.ReadOnlySpanMarshaller.ConvertToManaged(THeader* pointer) -> FlexibleArray.FlexibleSpan<THeader, T>
 static FlexibleArray.FlexibleArrayMarshaller<THeader, T>.WritableSpanMarshaller.ConvertToManaged(THeader* pointer) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
-FlexibleArray.FlexibleArrayTransfer
 static FlexibleArray.FlexibleArrayOwnedMarshaller<THeader, T>.ConvertToManaged(THeader* pointer) -> FlexibleArray.FlexibleArray<THeader, T>?
-static FlexibleArray.FlexibleArrayTransfer.Adopt<THeader, T>(THeader* pointer) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
-static FlexibleArray.FlexibleArrayTransfer.AdoptReadOnly<THeader, T>(THeader* pointer) -> FlexibleArray.FlexibleArray<THeader, T>!
 FlexibleArray.IFlexibleArrayHeader<TSelf, T>
 FlexibleArray.IConstructibleFlexibleArrayHeader<TSelf, T>
 FlexibleArray.ITransferableFlexibleArrayHeader<TSelf, T>
@@ -81,3 +78,6 @@ FlexibleArray.MutableFlexibleSpan<THeader, T>.Truncate(int length) -> void
 FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>
 static FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>.ConvertToManaged(THeader* pointer) -> FlexibleArray.MutableFlexibleArray<THeader, T>?
 FlexibleArray.FlexibleArray<THeader, T>.Length.get -> int
+static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
+static FlexibleArray.FlexibleSpan<THeader, T>.Create(System.ReadOnlySpan<byte> buffer) -> FlexibleArray.FlexibleSpan<THeader, T>
+static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Memory<byte> buffer) -> FlexibleArray.MutableFlexibleArray<THeader, T>!

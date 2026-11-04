@@ -36,6 +36,19 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
+    public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [7, 8]);
+
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer);
+
+        Assert.Equal(2, view.Length);
+        Assert.Equal(3, view.Capacity);
+        Assert.Equal(new[] { 7, 8 }, view.Elements.ToArray());
+    }
+
+    [Fact]
     public void ZeroLength_KeepsFullHeaderAndEmptyElements()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(0)];

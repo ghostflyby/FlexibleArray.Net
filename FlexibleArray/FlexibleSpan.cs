@@ -71,6 +71,25 @@ public readonly ref struct FlexibleSpan<THeader, T>
     }
 
     /// <summary>
+    /// Creates a read-only view over a buffer that already holds a complete object: the
+    /// buffer is not written, and the tail length is derived from the header contract.
+    /// Alignment is not validated.
+    /// </summary>
+    /// <exception cref="ArgumentException">The buffer is shorter than the header.</exception>
+    public static FlexibleSpan<THeader, T> Create(ReadOnlySpan<byte> buffer)
+    {
+        if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
+        {
+            throw new ArgumentException(
+                $"The buffer needs at least {FlexibleArrayLayout<THeader, T>.HeaderSize} bytes but has {buffer.Length}.", nameof(buffer));
+        }
+
+        var headerBuffer = MemoryMarshal.Cast<byte, THeader>(buffer);
+        ref var header = ref MemoryMarshal.GetReference(headerBuffer);
+        return new FlexibleSpan<THeader, T>(in header);
+    }
+
+    /// <summary>
     /// Parses a self-describing object from a buffer: reads the header and asks the header
     /// contract for the logical tail length.
     /// </summary>
