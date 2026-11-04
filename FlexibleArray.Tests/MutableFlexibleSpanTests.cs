@@ -84,7 +84,7 @@ public sealed class MutableFlexibleSpanTests
     public void Wrap_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [7, 8]);
+        TestBuffers.Build(buffer, new PacketHeader { Count = 2 }, [7, 8]);
         var expected = buffer.ToArray();
 
         var view = MutableFlexibleSpan<PacketHeader, int>.Wrap(buffer);

@@ -58,7 +58,7 @@ public sealed class MutableFlexibleArrayTests
     public void Wrap_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        _ = new MutableFlexibleArray<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [8, 9]);
+        TestBuffers.Build(buffer.Span, new PacketHeader { Count = 2 }, [8, 9]);
         var expected = buffer.ToArray();
 
         using var array = MutableFlexibleArray<PacketHeader, int>.Wrap(buffer);
@@ -138,7 +138,7 @@ public sealed class MutableFlexibleArrayTests
     public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [4, 5, 6]);
+        TestBuffers.Build(buffer, new PacketHeader(), [4, 5, 6]);
 
         using var memory =
             FlexibleArray<PacketHeader, int>.Wrap(buffer);
