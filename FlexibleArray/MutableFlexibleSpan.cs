@@ -65,7 +65,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// <summary>Gets an element view covering the entire tail, including the first-element placeholder field.</summary>
     public Span<T> Elements => MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref _header), _length);
 
-    /// <summary>Gets the writable region between the committed length and the capacity, for in-place construction before <see cref="Advance"/>.</summary>
+    /// <summary>Gets the writable region between the committed length and the capacity, used by <see cref="AppendRange"/>.</summary>
     internal Span<T> FreeElements => MemoryMarshal.CreateSpan(ref Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length), _capacity - _length);
 
     /// <summary>Appends one element and updates the header's length field.</summary>
@@ -79,10 +79,8 @@ public ref struct MutableFlexibleSpan<THeader, T>
             throw new InvalidOperationException("The flexible array is at capacity.");
         }
 
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + 1);
         Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length) = item;
-        _length++;
-        _owner?.OnLengthStamped(_length);
+        Advance(1);
     }
 
     /// <summary>Appends a range of elements and updates the header's length field.</summary>
@@ -96,26 +94,13 @@ public ref struct MutableFlexibleSpan<THeader, T>
             throw new InvalidOperationException($"The free capacity is {_capacity - _length} elements but {items.Length} were given.");
         }
 
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + items.Length);
         items.CopyTo(FreeElements);
-        _length += items.Length;
-        _owner?.OnLengthStamped(_length);
+        Advance(items.Length);
     }
 
-    /// <summary>
-    /// Commits elements written into the caller's buffer immediately after the committed
-    /// tail, for nested objects built in place, and updates the header's length field.
-    /// </summary>
-    /// <remarks>
-    /// The caller advances past the elements it wrote: for a byte tail that is the nested
-    /// object's extent rounded up to whatever alignment the protocol requires.
-    /// </remarks>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="elementCount"/> is negative or exceeds the free capacity.
-    /// </exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void Advance(int elementCount)
+    // The commit primitive behind Append and AppendRange: the bytes are in place, and this
+    // stamps the header and the tracked length together.
+    private void Advance(int elementCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(elementCount);
         if (elementCount == 0)

@@ -59,22 +59,6 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     public void AppendRange(ReadOnlySpan<T> items) => _core.AppendRange(items);
 
     /// <summary>
-    /// Commits elements written into the caller's buffer immediately after the committed
-    /// tail, for nested objects built in place, and updates the header's length field.
-    /// </summary>
-    /// <remarks>
-    /// The caller advances past the elements it wrote: for a byte tail that is the nested
-    /// object's extent rounded up to whatever alignment the protocol requires.
-    /// </remarks>
-    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="elementCount"/> is negative or exceeds the free capacity.
-    /// </exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void Advance(int elementCount) => _core.Advance(elementCount);
-
-    /// <summary>
     /// Shrinks the committed length, updating the header's length field. The removal is
     /// logical: the bytes stay in place and are overwritten by later appends; the capacity
     /// does not change.
