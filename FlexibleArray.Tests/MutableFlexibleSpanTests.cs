@@ -36,6 +36,31 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
+    public void ByteLength_CountsTheFullHeaderWhenEmptyAndGrowsWithTheTail()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        var empty = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), ReadOnlySpan<int>.Empty);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.HeaderSize, empty.ByteLength);
+
+        var filled = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2, 3]);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), filled.ByteLength);
+        Assert.NotEqual(FlexibleArrayLayout<PacketHeader, int>.HeaderSize, filled.ByteLength);
+    }
+
+    [Fact]
+    public void ByteLength_PacksConsecutiveObjectsWithoutOverlap()
+    {
+        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3) * 2];
+        var first = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2, 3]);
+        var second = MutableFlexibleSpan<PacketHeader, int>.Create(buffer.AsSpan(first.ByteLength), new PacketHeader(), [4, 5, 6]);
+
+        var firstBack = FlexibleSpan<PacketHeader, int>.Create(buffer.AsSpan(0, first.ByteLength));
+        var secondBack = FlexibleSpan<PacketHeader, int>.Create(buffer.AsSpan(first.ByteLength, second.ByteLength));
+        Assert.Equal(new[] { 1, 2, 3 }, firstBack.Elements.ToArray());
+        Assert.Equal(new[] { 4, 5, 6 }, secondBack.Elements.ToArray());
+    }
+
+    [Fact]
     public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];

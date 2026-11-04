@@ -57,7 +57,23 @@ public sealed class FlexibleArray<THeader, T> : IDisposable
     }
 
     /// <summary>Gets the tail element count from the header's length field.</summary>
-    public int Length => THeader.GetTailElementCount(in _core.HeaderReference);
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public int Length
+    {
+        get
+        {
+            _core.ThrowIfDisposed();
+            return THeader.GetTailElementCount(in _core.HeaderReference);
+        }
+    }
+
+    /// <summary>Gets the byte extent of the committed object, header included.</summary>
+    /// <remarks>
+    /// Counts the full header even when the tail is empty, so consecutive objects laid out at
+    /// this boundary do not overlap. Protocol alignment between objects is not included.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
+    public int ByteLength => FlexibleArrayLayout<THeader, T>.GetRequiredBytes(Length);
 
     /// <summary>Gets a read-only reference to the header.</summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
