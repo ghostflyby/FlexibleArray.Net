@@ -59,7 +59,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
     public Span<T> Elements => MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref _header), _length);
 
     /// <summary>Gets the writable region between the committed length and the capacity, for in-place construction before <see cref="Advance"/>.</summary>
-    public Span<T> FreeElements => MemoryMarshal.CreateSpan(ref Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length), _capacity - _length);
+    internal Span<T> FreeElements => MemoryMarshal.CreateSpan(ref Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length), _capacity - _length);
 
     /// <summary>Appends one element and updates the header's length field.</summary>
     /// <exception cref="InvalidOperationException">The view is at capacity.</exception>
@@ -96,8 +96,8 @@ public ref struct MutableFlexibleSpan<THeader, T>
     }
 
     /// <summary>
-    /// Commits elements that were written in place through <see cref="FreeElements"/>, for
-    /// nested objects built at the tail, and updates the header's length field.
+    /// Commits elements written into the caller's buffer immediately after the committed
+    /// tail, for nested objects built in place, and updates the header's length field.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="elementCount"/> is negative or exceeds the free capacity.
