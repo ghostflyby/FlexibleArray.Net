@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace FlexibleArray;
 
-internal sealed unsafe class FlexibleArrayCore<THeader, T>
+internal sealed unsafe class FlexibleArrayCore<THeader, T> : IDisposable
     where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
     where T : unmanaged
 {
@@ -57,8 +57,6 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         }
     }
 
-    internal bool IsDisposed => _committedLength < 0;
-
     internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_committedLength < 0, this);
 
     internal MemoryHandle Pin()
@@ -67,7 +65,7 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         return _pointer != null ? new MemoryHandle(_pointer) : _memory.Pin();
     }
 
-    internal void Dispose()
+    public void Dispose()
     {
         Release();
         GC.SuppressFinalize(this);
