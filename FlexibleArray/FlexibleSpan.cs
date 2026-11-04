@@ -79,6 +79,6 @@ public readonly ref struct FlexibleSpan<THeader, T>
                 $"The buffer needs at least {requiredBytes} bytes for the derived tail length but has {buffer.Length}.", nameof(buffer));
         }
 
-        return new FlexibleSpan<THeader, T>(in header);
+        return new FlexibleSpan<THeader, T>(in header, length);
     }
 }

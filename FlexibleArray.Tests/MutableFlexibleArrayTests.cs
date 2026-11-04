@@ -146,6 +146,22 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
+    public void ReadOnlyCreate_OnFormedBuffer_RejectsInvalidDerivedLengths()
+    {
+        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        var span = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [4, 5]);
+
+        using var memory = FlexibleArray<PacketHeader, int>.Create(buffer);
+        Assert.Equal(2, memory.Length);
+
+        span.Header = new PacketHeader { Count = -1 };
+        Assert.Throws<ArgumentOutOfRangeException>(() => FlexibleArray<PacketHeader, int>.Create(buffer));
+
+        span.Header = new PacketHeader { Count = 99 };
+        Assert.Throws<ArgumentException>(() => FlexibleArray<PacketHeader, int>.Create(buffer));
+    }
+
+    [Fact]
     public void ReferenceConversion_WritableIsAReadOnly()
     {
         var array = MutableFlexibleArray<PacketHeader, int>.Create(

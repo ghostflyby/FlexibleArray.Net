@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+
 namespace FlexibleArray.Tests;
 
 /// <summary>
@@ -36,6 +38,22 @@ public sealed class FlexibleSpanBufferTests
     {
         var buffer = new byte[8];
         Assert.Throws<ArgumentException>(() => FlexibleSpan<PacketHeader, int>.Create(buffer));
+    }
+
+    [Fact]
+    public void Create_SentinelWalk_DerivesLengthFromTheHeader()
+    {
+        // A sentinel producer writes the bytes itself: tag, then elements up to and including
+        // the zero terminator — which is why the buffer is sized for three elements.
+        Span<byte> buffer = new byte[FlexibleArrayLayout<SentinelHeader, int>.GetRequiredBytes(3)];
+        buffer[0] = 1;
+        BinaryPrimitives.WriteInt32LittleEndian(buffer[(int)FlexibleArrayLayout<SentinelHeader, int>.FirstElementOffset..], 1);
+        BinaryPrimitives.WriteInt32LittleEndian(buffer[((int)FlexibleArrayLayout<SentinelHeader, int>.FirstElementOffset + 4)..], 2);
+
+        var view = FlexibleSpan<SentinelHeader, int>.Create(buffer);
+
+        Assert.Equal(2, view.Length);
+        Assert.Equal(new[] { 1, 2 }, view.Elements.ToArray());
     }
 
     private static byte[] BuildPacket(int count, params int[] elements)
