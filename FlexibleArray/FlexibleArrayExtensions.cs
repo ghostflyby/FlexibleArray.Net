@@ -44,6 +44,11 @@ public static class FlexibleArrayExtensions
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, IConstructibleFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
+        if (length == span.Length)
+        {
+            return;
+        }
+
         var truncated = FlexibleArrayMutation.Truncate<THeader, T>(ref span.Header, span.Length, length);
         span.SetLengthField(truncated);
         span.NotifyLengthStamped();
@@ -90,6 +95,11 @@ public static class FlexibleArrayExtensions
         where T : unmanaged
     {
         array.ThrowIfDisposedInternal();
+        if (length == array.LengthValue)
+        {
+            return;
+        }
+
         var truncated = FlexibleArrayMutation.Truncate<THeader, T>(ref array.HeaderReference, array.LengthValue, length);
         array.SetCommittedLength(truncated);
     }

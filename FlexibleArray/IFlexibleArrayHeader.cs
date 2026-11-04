@@ -19,9 +19,10 @@ namespace FlexibleArray;
 /// </para>
 /// <para>
 /// The header's length-related fields are contract state: do not mutate them through a
-/// public header reference — change lengths only through
-/// <see cref="IConstructibleFlexibleArrayHeader{TSelf, T}.WithTailElementCount"/> or the
-/// library's capacity members.
+/// public header reference — change lengths only through the extension methods that require
+/// a tail-length write-back, or through
+/// <see cref="IConstructibleFlexibleArrayHeader{TSelf, T}.WithTailElementCount"/> inside the
+/// header's own implementation.
 /// </para>
 /// </remarks>
 public interface IFlexibleArrayHeader<TSelf, T>

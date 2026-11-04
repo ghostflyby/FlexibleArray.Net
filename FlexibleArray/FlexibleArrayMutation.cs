@@ -40,23 +40,18 @@ internal static class FlexibleArrayMutation
         return length + items.Length;
     }
 
-    internal static int Truncate<THeader, T>(ref THeader header, int length, int target)
+    internal static int Truncate<THeader, T>(ref THeader header, int currentLength, int length)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, IConstructibleFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(target);
-        if (target > length)
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        if (length > currentLength)
         {
-            throw new ArgumentOutOfRangeException(nameof(target),
-                $"The truncate target {target} exceeds the committed length {length}.");
+            throw new ArgumentOutOfRangeException(nameof(length),
+                $"The truncate target {length} exceeds the committed length {currentLength}.");
         }
 
-        if (target == length)
-        {
-            return target;
-        }
-
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref header, target);
-        return target;
+        FlexibleArrayConstruction.SetLength<THeader, T>(ref header, length);
+        return length;
     }
 }

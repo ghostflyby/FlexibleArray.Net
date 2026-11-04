@@ -268,6 +268,23 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
+    public void Append_WithAnAsymmetricWriteBack_LeavesTheObjectUntouched()
+    {
+        var buffer = new byte[FlexibleArrayLayout<BrokenSetHeader, int>.GetRequiredBytes(2)];
+        var fields = MemoryMarshal.Cast<byte, int>(buffer.AsSpan());
+        fields[0] = 1;
+        fields[1] = 5;
+        using var array = MutableFlexibleArray<BrokenSetHeader, int>.Create(buffer);
+        Assert.Equal(1, array.Length);
+
+        Assert.Throws<InvalidOperationException>(() => array.Append(7));
+
+        Assert.Equal(1, array.Length);
+        Assert.Equal(1, array.Header.Count);
+        Assert.Equal(5, array.Header.FirstElement);
+    }
+
+    [Fact]
     public void Length_FollowsStampsThroughProjections()
     {
         // Every stamp — including one through a held projection, with no object member
