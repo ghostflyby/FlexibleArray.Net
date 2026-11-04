@@ -77,7 +77,9 @@ public sealed class MutableFlexibleSpanTests
     {
         var buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
         Assert.Throws<ArgumentException>(() =>
-            _ = new MutableFlexibleSpan<CharHeader, char>(buffer, new CharHeader { Count = 2 }, ['a']));
+        {
+            _ = new MutableFlexibleSpan<CharHeader, char>(buffer, new CharHeader { Count = 2 }, ['a']);
+        });
     }
 
     [Fact]
