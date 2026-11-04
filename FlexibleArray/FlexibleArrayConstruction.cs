@@ -4,24 +4,24 @@ namespace FlexibleArray;
 
 internal static class FlexibleArrayConstruction
 {
-    internal static void WriteObject<THeader, T>(ref THeader destination, in THeader header, ReadOnlySpan<T> elements)
+    internal static void WriteObject<THeader, T>(out THeader destination, in THeader header, ReadOnlySpan<T> elements)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
         if (header is IConstructibleFlexibleArrayHeader<THeader, T> constructible)
         {
-            WriteStampedObject(ref destination, constructible, elements);
+            WriteStampedObject(out destination, constructible, elements);
         }
         else
         {
-            WriteDeclaredObject(ref destination, header, elements);
+            WriteDeclaredObject(out destination, header, elements);
         }
     }
 
     // The header registers a write-back, so the library authors the length from the element
     // count and overwrites whatever the incoming header declared.
     private static void WriteStampedObject<THeader, T>(
-        ref THeader destination,
+        out THeader destination,
         IConstructibleFlexibleArrayHeader<THeader, T> constructible,
         ReadOnlySpan<T> elements)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
@@ -35,7 +35,7 @@ internal static class FlexibleArrayConstruction
     // disagrees is rejected. The check runs after the copy because the length may be derived
     // from tail content — a sentinel walk over unwritten bytes would reject a valid request.
     private static void WriteDeclaredObject<THeader, T>(
-        ref THeader destination,
+        out THeader destination,
         in THeader header,
         ReadOnlySpan<T> elements)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
