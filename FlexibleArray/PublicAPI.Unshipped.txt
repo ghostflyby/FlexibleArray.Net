@@ -48,8 +48,6 @@ FlexibleArray.IFlexibleArrayHeader<TSelf, T>
 FlexibleArray.IConstructibleFlexibleArrayHeader<TSelf, T>
 FlexibleArray.ITransferableFlexibleArrayHeader<TSelf, T>
 FlexibleArray.MemoryPoolExtensions
-static FlexibleArray.FlexibleSpan<THeader, T>.Create(System.ReadOnlySpan<byte> buffer, int length) -> FlexibleArray.FlexibleSpan<THeader, T>
-static FlexibleArray.FlexibleSpan<THeader, T>.TryParse(System.ReadOnlySpan<byte> buffer, out FlexibleArray.FlexibleSpan<THeader, T> view) -> bool
 static FlexibleArray.MemoryPoolExtensions.Create<THeader, T>(this System.Buffers.MemoryPool<byte>! pool, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator FlexibleArray.MutableFlexibleSpan<THeader, T>(FlexibleArray.MutableFlexibleArray<THeader, T>? array) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
@@ -58,8 +56,6 @@ static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(in THeader header, 
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(in THeader header, int capacity) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Func<int, System.Memory<byte>>! allocator, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Memory<byte> buffer, in THeader header, System.ReadOnlySpan<T> elements) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
-static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Memory<byte> buffer, int length) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
-static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer, int length) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleSpan<THeader, T>.implicit operator FlexibleArray.FlexibleSpan<THeader, T>(FlexibleArray.MutableFlexibleSpan<THeader, T> span) -> FlexibleArray.FlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator FlexibleArray.FlexibleArray<THeader, T>!(FlexibleArray.MutableFlexibleArray<THeader, T>? array) -> FlexibleArray.FlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator FlexibleArray.FlexibleSpan<THeader, T>(FlexibleArray.MutableFlexibleArray<THeader, T>? array) -> FlexibleArray.FlexibleSpan<THeader, T>

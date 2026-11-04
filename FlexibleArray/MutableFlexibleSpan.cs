@@ -153,31 +153,14 @@ public ref struct MutableFlexibleSpan<THeader, T>
     }
 
     /// <summary>
-    /// Creates a view over an existing buffer. The buffer must be at least as long as the
-    /// required byte count; alignment is not validated. The capacity is the buffer's element
-    /// capacity.
+    /// Builds a complete object at the start of the buffer; alignment is the buffer's
+    /// responsibility. The tail length is derived from the element count — stamped when the
+    /// header registers a write-back, read from the declared length field otherwise.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
-    /// <exception cref="ArgumentException">The buffer is too short.</exception>
-    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer, int length)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(length);
-        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
-        if (buffer.Length < requiredBytes)
-        {
-            throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
-        }
-
-        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
-        return new MutableFlexibleSpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length, ElementCapacity(buffer.Length));
-    }
-
-    /// <summary>
-    /// Creates a view over a buffer that already holds a complete object: the buffer is not
-    /// written, the tail length is derived from the header contract, and the capacity is the
-    /// buffer's element capacity. Alignment is not validated.
-    /// </summary>
-    /// <exception cref="ArgumentException">The buffer is shorter than the header.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The header contract derives a negative tail length.</exception>
+    /// <exception cref="ArgumentException">
+    /// The buffer is too short for the header or for the derived tail length.
+    /// </exception>
     public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
@@ -188,7 +171,16 @@ public ref struct MutableFlexibleSpan<THeader, T>
 
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         ref var header = ref Unsafe.As<byte, THeader>(ref firstByte);
-        return new MutableFlexibleSpan<THeader, T>(ref header, THeader.GetTailElementCount(in header), ElementCapacity(buffer.Length));
+        var length = THeader.GetTailElementCount(in header);
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
+        if (requiredBytes > buffer.Length)
+        {
+            throw new ArgumentException(
+                $"The buffer needs at least {requiredBytes} bytes for the derived tail length but has {buffer.Length}.", nameof(buffer));
+        }
+
+        return new MutableFlexibleSpan<THeader, T>(ref header, length, ElementCapacity(buffer.Length));
     }
 
     /// <summary>

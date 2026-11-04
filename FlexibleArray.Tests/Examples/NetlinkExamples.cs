@@ -98,8 +98,7 @@ internal static partial class DeclarativeNetlink
 
     public static void BuildDumpRequest(Span<byte> request)
     {
-        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(
-            request, Netlink.IfinfomsgSize);
+        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(request, new NlmsgHeader());
         message.Header = new NlmsgHeader
         {
             Len = (uint)request.Length,

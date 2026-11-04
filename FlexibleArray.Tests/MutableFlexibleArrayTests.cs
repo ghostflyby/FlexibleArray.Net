@@ -57,12 +57,29 @@ public sealed class MutableFlexibleArrayTests
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
         _ = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [8, 9]);
+        var expected = buffer.ToArray();
 
         using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer);
 
         Assert.Equal(2, array.Length);
         Assert.Equal(2, array.Capacity);
+        Assert.Equal(expected, buffer.ToArray());
         Assert.Equal(new[] { 8, 9 }, array.Span.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Create_OnFormedBuffer_RejectsInvalidDerivedLengths()
+    {
+        Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [8, 9]);
+
+        array.Header = new PacketHeader { Count = -1 };
+        Assert.Throws<ArgumentOutOfRangeException>(() => MutableFlexibleArray<PacketHeader, int>.Create(buffer));
+
+        array.Header = new PacketHeader { Count = 99 };
+        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(buffer));
+
+        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(new byte[8]));
     }
 
     [Fact]
@@ -74,7 +91,6 @@ public sealed class MutableFlexibleArrayTests
         // a constructible header's count is stamped from the elements instead.
         Assert.Throws<ArgumentException>(() => MutableFlexibleArray<DoubleTagOriginal, int>.Create(
             new DoubleTagOriginal(), [1]));
-        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(new byte[8], 1));
     }
 
     [Fact]
