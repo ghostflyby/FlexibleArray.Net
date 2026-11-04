@@ -1,18 +1,17 @@
 namespace FlexibleArray;
 
 /// <summary>
-/// Adopts natively allocated complete objects transferred to the caller, exposing them as
-/// flexible array objects whose disposal routes through the header-registered release.
+/// The marshal-facing conversion between native pointers and flexible array objects: this is
+/// the only place a raw <c>THeader*</c> is adopted, and it writes nothing — the object is
+/// assumed to have been formed by its native producer. The disposal routes through the
+/// header-registered release, with the finalizer as a leak safety net.
 /// </summary>
-public static class FlexibleArrayTransfer
+internal static unsafe class FlexibleArrayTransfer
 {
-    /// <summary>
-    /// Adopts the transferred object at the given location as a writable object. Disposal —
-    /// and the finalizer, as a leak safety net — release it via the header's registered
-    /// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}.Release"/>.
-    /// </summary>
+    /// <summary>Adopts the transferred object at the given location as a writable object.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="pointer"/> is null.</exception>
-    public static unsafe MutableFlexibleArray<THeader, T> Adopt<THeader, T>(THeader* pointer)
+    /// <exception cref="ArgumentOutOfRangeException">The derived tail length is negative.</exception>
+    internal static MutableFlexibleArray<THeader, T> Adopt<THeader, T>(THeader* pointer)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, ITransferableFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
@@ -25,13 +24,10 @@ public static class FlexibleArrayTransfer
             length));
     }
 
-    /// <summary>
-    /// Adopts the transferred object at the given location as a read-only object. Disposal —
-    /// and the finalizer, as a leak safety net — release it via the header's registered
-    /// <see cref="ITransferableFlexibleArrayHeader{TSelf, T}.Release"/>.
-    /// </summary>
+    /// <summary>Adopts the transferred object at the given location as a read-only object.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="pointer"/> is null.</exception>
-    public static unsafe FlexibleArray<THeader, T> AdoptReadOnly<THeader, T>(THeader* pointer)
+    /// <exception cref="ArgumentOutOfRangeException">The derived tail length is negative.</exception>
+    internal static FlexibleArray<THeader, T> AdoptReadOnly<THeader, T>(THeader* pointer)
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, ITransferableFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {

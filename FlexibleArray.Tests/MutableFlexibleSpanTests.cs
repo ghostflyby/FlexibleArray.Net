@@ -9,7 +9,7 @@ public sealed class MutableFlexibleSpanTests
     public void Elements_AliasHeaderPlaceholderField()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 3);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 3 }, [0, 0, 0]);
 
         // The interface-returned field reference and the first element are the same memory: aliasing in both directions.
         view.Elements[0] = 42;
@@ -32,7 +32,22 @@ public sealed class MutableFlexibleSpanTests
         Assert.Equal(2, readOnly.Header.Count);
         Assert.Equal(12345, readOnly.Header.Timestamp);
         Assert.Equal(new[] { 2, 3 }, readOnly.Elements.ToArray());
-        Assert.True(FlexibleSpan<PacketHeader, int>.Create(buffer, 2).Elements.SequenceEqual(readOnly.Elements));
+        Assert.True(FlexibleSpan<PacketHeader, int>.Create(buffer).Elements.SequenceEqual(readOnly.Elements));
+    }
+
+    [Fact]
+    public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
+    {
+        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
+        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [7, 8]);
+        var expected = buffer.ToArray();
+
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer);
+
+        Assert.Equal(2, view.Length);
+        Assert.Equal(3, view.Capacity);
+        Assert.Equal(expected, buffer.ToArray());
+        Assert.Equal(new[] { 7, 8 }, view.Elements.ToArray());
     }
 
     [Fact]
@@ -55,7 +70,7 @@ public sealed class MutableFlexibleSpanTests
         // PacketHeader: sizeof(THeader)=24, offset=16, element size=4. The header covers
         // [0,24), overlapping e0 ([16,20)) and e1 ([20,24)).
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [0, 0]);
         view.Elements[0] = 10;
         view.Elements[1] = 20;
 
@@ -71,18 +86,18 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
-    public void Create_RejectsInvalidArguments()
+    public void Create_OnFormedBuffer_RejectsInvalidDerivedLengths()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-        {
-            Span<byte> buffer = new byte[32];
-            _ = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, -1);
-        });
-        Assert.Throws<ArgumentException>(() =>
-        {
-            Span<byte> buffer = new byte[16];
-            _ = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 3);
-        });
+        byte[] buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [1, 2]);
+
+        view.Header = new PacketHeader { Count = -1 };
+        Assert.Throws<ArgumentOutOfRangeException>(() => MutableFlexibleSpan<PacketHeader, int>.Create(buffer));
+
+        view.Header = new PacketHeader { Count = 99 };
+        Assert.Throws<ArgumentException>(() => MutableFlexibleSpan<PacketHeader, int>.Create(buffer));
+
+        Assert.Throws<ArgumentException>(() => MutableFlexibleSpan<PacketHeader, int>.Create(new byte[8]));
     }
 
     [Fact]
@@ -146,7 +161,7 @@ public sealed class MutableFlexibleSpanTests
     {
         // A buffer larger than the required byte count contributes its surplus as capacity.
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2) + 4 * sizeof(int)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, 2);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [0, 0]);
         Assert.Equal(2, view.Length);
         Assert.Equal(6, view.Capacity);
         Assert.Equal(4, view.FreeElements.Length);
@@ -260,22 +275,26 @@ public sealed class MutableFlexibleSpanTests
     [Fact]
     public void Mutations_RequireAWriteBack()
     {
-        // Reading a header without a write-back is fine; changing its length is not. The raw
-        // form keeps a committed length of 1 with capacity to spare, past the bounds checks.
+        // CharHeader reads its length from a count field but registers no write-back, so a
+        // buffer with spare capacity keeps length below capacity and the mutation reaches
+        // the length change, which is the rejected operation.
         Assert.Throws<NotSupportedException>(() =>
         {
-            Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(2)];
-            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(buffer, 1).Append(1);
+            Span<byte> buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
+            var view = MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 1 }, ['a']);
+            view.Append('b');
         });
         Assert.Throws<NotSupportedException>(() =>
         {
-            Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(2)];
-            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(buffer, 1).Advance(1);
+            Span<byte> buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
+            var view = MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 1 }, ['a']);
+            view.Advance(1);
         });
         Assert.Throws<NotSupportedException>(() =>
         {
-            Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(2)];
-            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(buffer, 1).Truncate(0);
+            Span<byte> buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
+            var view = MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 1 }, ['a']);
+            view.Truncate(0);
         });
     }
 }

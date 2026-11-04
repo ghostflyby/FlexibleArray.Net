@@ -52,51 +52,33 @@ public readonly ref struct FlexibleSpan<THeader, T>
     }
 
     /// <summary>
-    /// Creates a read-only view over an existing buffer. The buffer must be at least as long
-    /// as the required byte count; alignment is not validated.
+    /// Creates a read-only view over a buffer that already holds a complete object: the
+    /// buffer is not written, and the tail length is derived from the header contract and
+    /// validated against the buffer extent. Alignment is not validated.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
-    /// <exception cref="ArgumentException">The buffer is too short.</exception>
-    public static FlexibleSpan<THeader, T> Create(ReadOnlySpan<byte> buffer, int length)
+    /// <exception cref="ArgumentOutOfRangeException">The header contract derives a negative tail length.</exception>
+    /// <exception cref="ArgumentException">
+    /// The buffer is too short for the header or for the derived tail length.
+    /// </exception>
+    public static FlexibleSpan<THeader, T> Create(ReadOnlySpan<byte> buffer)
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(length);
-        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
-        if (buffer.Length < requiredBytes)
-        {
-            throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
-        }
-
-        ref var firstByte = ref MemoryMarshal.GetReference(buffer);
-        return new FlexibleSpan<THeader, T>(ref Unsafe.As<byte, THeader>(ref firstByte), length);
-    }
-
-    /// <summary>
-    /// Parses a self-describing object from a buffer: reads the header and asks the header
-    /// contract for the logical tail length.
-    /// </summary>
-    /// <returns>
-    /// false when the buffer is shorter than the full header, or when the derived tail length
-    /// is negative or exceeds the buffer's element capacity.
-    /// </returns>
-    public static bool TryParse(ReadOnlySpan<byte> buffer, out FlexibleSpan<THeader, T> view)
-    {
-        view = default;
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {
-            return false;
+            throw new ArgumentException(
+                $"The buffer needs at least {FlexibleArrayLayout<THeader, T>.HeaderSize} bytes but has {buffer.Length}.", nameof(buffer));
         }
 
-        var headerBuf = MemoryMarshal.Cast<byte, THeader>(buffer);
-        ref var header = ref MemoryMarshal.GetReference(headerBuf);
+        var headerBuffer = MemoryMarshal.Cast<byte, THeader>(buffer);
+        ref var header = ref MemoryMarshal.GetReference(headerBuffer);
         var length = THeader.GetTailElementCount(in header);
-        long capacity = (buffer.Length - FlexibleArrayLayout<THeader, T>.FirstElementOffset)
-            / FlexibleArrayLayout<THeader, T>.ElementSize;
-        if ((uint)length > (uint)capacity)
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
+        if (requiredBytes > buffer.Length)
         {
-            return false;
+            throw new ArgumentException(
+                $"The buffer needs at least {requiredBytes} bytes for the derived tail length but has {buffer.Length}.", nameof(buffer));
         }
 
-        view = Create(buffer, length);
-        return true;
+        return new FlexibleSpan<THeader, T>(in header, length);
     }
 }

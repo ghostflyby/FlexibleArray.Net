@@ -148,20 +148,31 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
         => Build(buffer, header, elements);
 
     /// <summary>
-    /// Creates a writable object over an existing buffer with the given committed length;
-    /// alignment is not validated. For headers whose length field cannot describe the tail,
-    /// the declared length is the truth.
+    /// Creates a writable object over a buffer that already holds a complete object: the
+    /// buffer is not written, and the tail length is derived from the header contract and
+    /// validated against the buffer extent. Alignment is not validated.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
-    /// <exception cref="ArgumentException">The buffer is too short.</exception>
-
-    public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer, int length)
+    /// <exception cref="ArgumentOutOfRangeException">The header contract derives a negative tail length.</exception>
+    /// <exception cref="ArgumentException">
+    /// The buffer is too short for the header or for the derived tail length.
+    /// </exception>
+    public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer)
     {
+        if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
+        {
+            throw new ArgumentException(
+                $"The buffer needs at least {FlexibleArrayLayout<THeader, T>.HeaderSize} bytes but has {buffer.Length}.", nameof(buffer));
+        }
+
+        ref var firstByte = ref MemoryMarshal.GetReference(buffer.Span);
+        ref var header = ref Unsafe.As<byte, THeader>(ref firstByte);
+        var length = THeader.GetTailElementCount(in header);
         ArgumentOutOfRangeException.ThrowIfNegative(length);
         var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(length);
-        if (buffer.Length < requiredBytes)
+        if (requiredBytes > buffer.Length)
         {
-            throw new ArgumentException($"The buffer needs at least {requiredBytes} bytes but has {buffer.Length}.", nameof(buffer));
+            throw new ArgumentException(
+                $"The buffer needs at least {requiredBytes} bytes for the derived tail length but has {buffer.Length}.", nameof(buffer));
         }
 
         return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(buffer, length, owner: null));
