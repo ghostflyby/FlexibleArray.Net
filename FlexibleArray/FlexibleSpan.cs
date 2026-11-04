@@ -59,7 +59,7 @@ public readonly ref struct FlexibleSpan<THeader, T>
     }
 
     /// <summary>
-    /// Creates a read-only view over a buffer that already holds a complete object: the
+    /// Wraps a buffer that already holds a complete object: the
     /// buffer is not written, and the tail length is derived from the header contract and
     /// validated against the buffer extent. Alignment is not validated.
     /// </summary>
@@ -67,7 +67,7 @@ public readonly ref struct FlexibleSpan<THeader, T>
     /// <exception cref="ArgumentException">
     /// The buffer is too short for the header or for the derived tail length.
     /// </exception>
-    public static FlexibleSpan<THeader, T> Create(ReadOnlySpan<byte> buffer)
+    public static FlexibleSpan<THeader, T> Wrap(ReadOnlySpan<byte> buffer)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {

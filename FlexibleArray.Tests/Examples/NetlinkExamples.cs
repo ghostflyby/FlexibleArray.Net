@@ -98,7 +98,7 @@ internal static partial class DeclarativeNetlink
 
     public static void BuildDumpRequest(Span<byte> request)
     {
-        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(request, new NlmsgHeader());
+        var message = new MutableFlexibleSpan<NlmsgHeader, byte>(request, new NlmsgHeader());
         message.Header = new NlmsgHeader
         {
             Len = (uint)request.Length,
@@ -390,17 +390,17 @@ public sealed class NetlinkExamples
         Span<byte> datagram = new byte[72];
         Span<byte> attribute = stackalloc byte[Netlink.Align4(9)];
 
-        var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(
+        var message = new MutableFlexibleSpan<NlmsgHeader, byte>(
             datagram, new NlmsgHeader { Type = Netlink.RtmNewlink, Seq = 1 });
         message.AppendRange(new byte[Netlink.IfinfomsgSize]);
-        MutableFlexibleSpan<NlattrHeader, byte>.Create(
+        new MutableFlexibleSpan<NlattrHeader, byte>(
             attribute, new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
         message.AppendRange(attribute[..Netlink.Align4(7)]);
         attribute.Clear();
-        MutableFlexibleSpan<NlattrHeader, byte>.Create(
+        new MutableFlexibleSpan<NlattrHeader, byte>(
             attribute, new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
         message.AppendRange(attribute[..Netlink.Align4(9)]);
-        MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
+        new MutableFlexibleSpan<NlmsgHeader, byte>(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
         Assert.Equal(52, (int)message.Header.Len);
 
         Span<byte> declaredRequest = new byte[32];

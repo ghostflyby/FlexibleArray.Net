@@ -9,7 +9,7 @@ public sealed class MutableFlexibleSpanTests
     public void Elements_AliasHeaderPlaceholderField()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 3 }, [0, 0, 0]);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 3 }, [0, 0, 0]);
 
         // The interface-returned field reference and the first element are the same memory: aliasing in both directions.
         view.Elements[0] = 42;
@@ -25,24 +25,24 @@ public sealed class MutableFlexibleSpanTests
     public void ReadOnlyView_ExposesSameData()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 12345 }, [2, 3]);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Timestamp = 12345 }, [2, 3]);
 
         FlexibleSpan<PacketHeader, int> readOnly = view;
         Assert.Equal(2, readOnly.Length);
         Assert.Equal(2, readOnly.Header.Count);
         Assert.Equal(12345, readOnly.Header.Timestamp);
         Assert.Equal(new[] { 2, 3 }, readOnly.Elements.ToArray());
-        Assert.True(FlexibleSpan<PacketHeader, int>.Create(buffer).Elements.SequenceEqual(readOnly.Elements));
+        Assert.True(FlexibleSpan<PacketHeader, int>.Wrap(buffer).Elements.SequenceEqual(readOnly.Elements));
     }
 
     [Fact]
     public void ByteLength_CountsTheFullHeaderWhenEmptyAndGrowsWithTheTail()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var empty = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), ReadOnlySpan<int>.Empty);
+        var empty = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), ReadOnlySpan<int>.Empty);
         Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.HeaderSize, empty.ByteLength);
 
-        var filled = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2, 3]);
+        var filled = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [1, 2, 3]);
         Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), filled.ByteLength);
         Assert.NotEqual(FlexibleArrayLayout<PacketHeader, int>.HeaderSize, filled.ByteLength);
     }
@@ -51,43 +51,43 @@ public sealed class MutableFlexibleSpanTests
     public void ByteLength_PacksConsecutiveObjectsWithoutOverlap()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3) * 2];
-        var first = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2, 3]);
-        var second = MutableFlexibleSpan<PacketHeader, int>.Create(buffer.AsSpan(first.ByteLength), new PacketHeader(), [4, 5, 6]);
+        var first = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [1, 2, 3]);
+        var second = new MutableFlexibleSpan<PacketHeader, int>(buffer.AsSpan(first.ByteLength), new PacketHeader(), [4, 5, 6]);
 
-        var firstBack = FlexibleSpan<PacketHeader, int>.Create(buffer.AsSpan(0, first.ByteLength));
-        var secondBack = FlexibleSpan<PacketHeader, int>.Create(buffer.AsSpan(first.ByteLength, second.ByteLength));
+        var firstBack = FlexibleSpan<PacketHeader, int>.Wrap(buffer.AsSpan(0, first.ByteLength));
+        var secondBack = FlexibleSpan<PacketHeader, int>.Wrap(buffer.AsSpan(first.ByteLength, second.ByteLength));
         Assert.Equal(new[] { 1, 2, 3 }, firstBack.Elements.ToArray());
         Assert.Equal(new[] { 4, 5, 6 }, secondBack.Elements.ToArray());
     }
 
     [Fact]
-    public void Create_WithAContentDerivedHeader_ValidatesTheWrittenTail()
+    public void Construct_WithAContentDerivedHeader_ValidatesTheWrittenTail()
     {
         // The length comes from a walk to the terminator, so the check must see the copied
         // elements rather than the untouched buffer.
         var buffer = new byte[8];
-        var view = MutableFlexibleSpan<CStrHeader, byte>.Create(buffer, new CStrHeader(), "abc"u8);
+        var view = new MutableFlexibleSpan<CStrHeader, byte>(buffer, new CStrHeader(), "abc"u8);
 
         Assert.Equal(3, view.Length);
         Assert.Equal("abc"u8.ToArray(), view.Elements.ToArray());
     }
 
     [Fact]
-    public void Create_WithAMismatchingDeclaredCount_RejectsTheRequest()
+    public void Construct_WithAMismatchingDeclaredCount_RejectsTheRequest()
     {
         var buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
         Assert.Throws<ArgumentException>(() =>
-            MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 2 }, ['a']));
+            new MutableFlexibleSpan<CharHeader, char>(buffer, new CharHeader { Count = 2 }, ['a']));
     }
 
     [Fact]
-    public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
+    public void Wrap_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [7, 8]);
+        new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [7, 8]);
         var expected = buffer.ToArray();
 
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer);
+        var view = MutableFlexibleSpan<PacketHeader, int>.Wrap(buffer);
 
         Assert.Equal(2, view.Length);
         Assert.Equal(3, view.Capacity);
@@ -99,7 +99,7 @@ public sealed class MutableFlexibleSpanTests
     public void ZeroLength_KeepsFullHeaderAndEmptyElements()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(0)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 12345, FirstElement = -1 }, ReadOnlySpan<int>.Empty);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Timestamp = 12345, FirstElement = -1 }, ReadOnlySpan<int>.Empty);
 
         Assert.Equal(0, view.Length);
         Assert.True(view.Elements.IsEmpty);
@@ -115,7 +115,7 @@ public sealed class MutableFlexibleSpanTests
         // PacketHeader: sizeof(THeader)=24, offset=16, element size=4. The header covers
         // [0,24), overlapping e0 ([16,20)) and e1 ([20,24)).
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [0, 0]);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [0, 0]);
         view.Elements[0] = 10;
         view.Elements[1] = 20;
 
@@ -131,27 +131,27 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
-    public void Create_OnFormedBuffer_RejectsInvalidDerivedLengths()
+    public void Wrap_OnFormedBuffer_RejectsInvalidDerivedLengths()
     {
         byte[] buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [1, 2]);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [1, 2]);
 
         view.Header = new PacketHeader { Count = -1 };
-        Assert.Throws<ArgumentOutOfRangeException>(() => MutableFlexibleSpan<PacketHeader, int>.Create(buffer));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MutableFlexibleSpan<PacketHeader, int>.Wrap(buffer));
 
         view.Header = new PacketHeader { Count = 99 };
-        Assert.Throws<ArgumentException>(() => MutableFlexibleSpan<PacketHeader, int>.Create(buffer));
+        Assert.Throws<ArgumentException>(() => MutableFlexibleSpan<PacketHeader, int>.Wrap(buffer));
 
-        Assert.Throws<ArgumentException>(() => MutableFlexibleSpan<PacketHeader, int>.Create(new byte[8]));
+        Assert.Throws<ArgumentException>(() => MutableFlexibleSpan<PacketHeader, int>.Wrap(new byte[8]));
     }
 
     [Fact]
-    public void Create_InfersCountFromElements()
+    public void Construct_InfersCountFromElements()
     {
         // No Count anywhere on the call site: the length field is stamped and the elements
         // joined in one step.
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 }, [5, 6]);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Timestamp = 7 }, [5, 6]);
 
         Assert.Equal(2, view.Length);
         Assert.Equal(2, view.Header.Count);
@@ -159,37 +159,37 @@ public sealed class MutableFlexibleSpanTests
         Assert.Equal(new[] { 5, 6 }, view.Elements.ToArray());
 
         // A stale count in the passed-in header is overwritten, not trusted.
-        var stale = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 99, Timestamp = 7 }, [5, 6]);
+        var stale = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 99, Timestamp = 7 }, [5, 6]);
         Assert.Equal(2, stale.Header.Count);
     }
 
     [Fact]
-    public void Create_RejectsAsymmetricWriteBack()
+    public void Construct_RejectsAsymmetricWriteBack()
     {
         Assert.Throws<InvalidOperationException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<BrokenSetHeader, int>.GetRequiredBytes(1)];
-            MutableFlexibleSpan<BrokenSetHeader, int>.Create(buffer, new BrokenSetHeader(), [1]);
+            new MutableFlexibleSpan<BrokenSetHeader, int>(buffer, new BrokenSetHeader(), [1]);
         });
     }
 
     [Fact]
-    public void Create_RejectsShortBuffer()
+    public void Construct_RejectsShortBuffer()
     {
         Assert.Throws<ArgumentException>(() =>
         {
             Span<byte> buffer = new byte[16];
-            _ = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), new int[3]);
+            _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), new int[3]);
         });
     }
 
     [Fact]
-    public void Create_WithoutWriteBack_ValidatesDeclaredLength()
+    public void Construct_WithoutWriteBack_ValidatesDeclaredLength()
     {
         // DoubleTagOriginal registers no write-back, so the declared length is the caller's
         // responsibility and the constructor checks it against the element count.
         Span<byte> buffer = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(0)];
-        var view = MutableFlexibleSpan<DoubleTagOriginal, int>.Create(
+        var view = new MutableFlexibleSpan<DoubleTagOriginal, int>(
             buffer, new DoubleTagOriginal { Value = 1.5 }, ReadOnlySpan<int>.Empty);
         Assert.Equal(0, view.Length);
         Assert.Equal(1.5, view.Header.Value);
@@ -197,7 +197,7 @@ public sealed class MutableFlexibleSpanTests
         Assert.Throws<ArgumentException>(() =>
         {
             Span<byte> small = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(1)];
-            MutableFlexibleSpan<DoubleTagOriginal, int>.Create(small, new DoubleTagOriginal(), [1]);
+            new MutableFlexibleSpan<DoubleTagOriginal, int>(small, new DoubleTagOriginal(), [1]);
         });
     }
 
@@ -206,7 +206,7 @@ public sealed class MutableFlexibleSpanTests
     {
         // A buffer larger than the required byte count contributes its surplus as capacity.
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2) + 4 * sizeof(int)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [0, 0]);
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [0, 0]);
         Assert.Equal(2, view.Length);
         Assert.Equal(6, view.Capacity);
         Assert.Equal(4, view.FreeElements.Length);
@@ -218,10 +218,10 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
-    public void Create_EmptyStart_StampsZeroAndDerivesCapacity()
+    public void Construct_EmptyStart_StampsZeroAndDerivesCapacity()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 99, Timestamp = 7 });
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 99, Timestamp = 7 });
 
         Assert.Equal(0, view.Length);
         Assert.Equal(0, view.Header.Count);
@@ -234,7 +234,7 @@ public sealed class MutableFlexibleSpanTests
     public void Append_GrowsAndStampsTheHeader()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 });
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Timestamp = 7 });
 
         view.Append(1);
         view.AppendRange([2, 3]);
@@ -249,7 +249,7 @@ public sealed class MutableFlexibleSpanTests
     public void Truncate_ShrinksLogically_AndReappendOverwrites()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 });
+        var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Timestamp = 7 });
         view.AppendRange([1, 2, 3]);
 
         view.Truncate(1);
@@ -272,25 +272,25 @@ public sealed class MutableFlexibleSpanTests
         Assert.Throws<InvalidOperationException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-            var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]);
+            var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [1, 2]);
             view.Append(3);
         });
         Assert.Throws<InvalidOperationException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-            var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]);
+            var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [1, 2]);
             view.AppendRange([3]);
         });
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-            var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]);
+            var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [1, 2]);
             view.Truncate(-1);
         });
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-            var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]);
+            var view = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [1, 2]);
             view.Truncate(3);
         });
     }

@@ -64,8 +64,31 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
     /// <exception cref="OverflowException">The aligned backing exceeds <see cref="int"/> bytes.</exception>
-    public static MutableFlexibleArray<THeader, T> Create(in THeader header, ReadOnlySpan<T> elements)
-        => Build(AllocatePinnedAligned(FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length)), header, elements);
+    public MutableFlexibleArray(in THeader header, ReadOnlySpan<T> elements)
+        : this(BuildCore(AllocatePinnedAligned(FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length)), header, elements))
+    {
+    }
+
+    /// <summary>
+    /// Rents storage from the pool, builds the complete object in it, and returns a writable
+    /// object whose disposal returns the rental — or the finalizer does, as a leak safety net.
+    /// The tail length is derived from the element count.
+    /// </summary>
+    /// <remarks>
+    /// Pools guarantee no particular alignment: headers requiring more than the shared pool's
+    /// pointer-size floor should use the managed construction or an aligning allocator.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="pool"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// A header without a registered write-back declares a tail length that does not match the
+    /// number of elements.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
+    /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
+    public MutableFlexibleArray(MemoryPool<byte> pool, in THeader header, ReadOnlySpan<T> elements)
+        : this(RentCore(pool, header, elements))
+    {
+    }
 
     /// <summary>
     /// Builds a complete object in allocator-provided storage; the alignment and the
@@ -79,17 +102,9 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
     /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
-    public static MutableFlexibleArray<THeader, T> Create(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
+    public MutableFlexibleArray(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
+        : this(AllocateCore(allocator, header, elements))
     {
-        ArgumentNullException.ThrowIfNull(allocator);
-        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
-        var buffer = allocator(byteLength);
-        if (buffer.Length < byteLength)
-        {
-            throw new ArgumentException($"The allocator returned {buffer.Length} bytes but at least {byteLength} are required.", nameof(allocator));
-        }
-
-        return Build(buffer, header, elements);
     }
 
     /// <summary>
@@ -102,11 +117,13 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
     /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
-    public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
-        => Build(buffer, header, elements);
+    public MutableFlexibleArray(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+        : this(BuildCore(buffer, header, elements))
+    {
+    }
 
     /// <summary>
-    /// Creates a writable object over a buffer that already holds a complete object: the
+    /// Wraps a buffer that already holds a complete object: the
     /// buffer is not written, and the tail length is derived from the header contract and
     /// validated against the buffer extent. Alignment is not validated.
     /// </summary>
@@ -114,7 +131,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// <exception cref="ArgumentException">
     /// The buffer is too short for the header or for the derived tail length.
     /// </exception>
-    public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer)
+    public static MutableFlexibleArray<THeader, T> Wrap(Memory<byte> buffer)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {
@@ -148,15 +165,9 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
     /// <exception cref="OverflowException">The aligned backing exceeds <see cref="int"/> bytes.</exception>
-    public static MutableFlexibleArray<THeader, T> Create(in THeader header, int capacity)
+    public MutableFlexibleArray(in THeader header, int capacity)
+        : this(StartEmptyCore(header, capacity))
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(capacity);
-        var memory = AllocatePinnedAligned(FlexibleArrayLayout<THeader, T>.GetRequiredBytes(capacity));
-
-        ref var firstByte = ref MemoryMarshal.GetReference(memory.Span);
-        ref var destination = ref Unsafe.As<byte, THeader>(ref firstByte);
-        FlexibleArrayConstruction.WriteObject(ref destination, header, ReadOnlySpan<T>.Empty);
-        return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(memory, 0, owner: null));
     }
 
     /// <summary>Converts the object to its writable projection; a null object yields a default, empty view.</summary>
@@ -221,10 +232,48 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// </summary>
     public void Dispose() => _core.Dispose();
 
-    private static MutableFlexibleArray<THeader, T> Build(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+    private static FlexibleArrayCore<THeader, T> BuildCore(Memory<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
     {
-        _ = MutableFlexibleSpan<THeader, T>.Create(buffer.Span, header, elements);
-        return new MutableFlexibleArray<THeader, T>(new FlexibleArrayCore<THeader, T>(buffer, elements.Length, owner: null));
+        _ = new MutableFlexibleSpan<THeader, T>(buffer.Span, header, elements);
+        return new FlexibleArrayCore<THeader, T>(buffer, elements.Length, owner: null);
+    }
+
+    private static FlexibleArrayCore<THeader, T> RentCore(MemoryPool<byte> pool, in THeader header, ReadOnlySpan<T> elements)
+    {
+        ArgumentNullException.ThrowIfNull(pool);
+        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        var rental = pool.Rent(byteLength);
+        try
+        {
+            _ = new MutableFlexibleSpan<THeader, T>(rental.Memory.Span, header, elements);
+            return new FlexibleArrayCore<THeader, T>(rental.Memory, elements.Length, rental);
+        }
+        catch
+        {
+            rental.Dispose();
+            throw;
+        }
+    }
+
+    private static FlexibleArrayCore<THeader, T> AllocateCore(Func<int, Memory<byte>> allocator, in THeader header, ReadOnlySpan<T> elements)
+    {
+        ArgumentNullException.ThrowIfNull(allocator);
+        var byteLength = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
+        var buffer = allocator(byteLength);
+        if (buffer.Length < byteLength)
+        {
+            throw new ArgumentException($"The allocator returned {buffer.Length} bytes but at least {byteLength} are required.", nameof(allocator));
+        }
+
+        return BuildCore(buffer, header, elements);
+    }
+
+    private static FlexibleArrayCore<THeader, T> StartEmptyCore(in THeader header, int capacity)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(capacity);
+        var memory = AllocatePinnedAligned(FlexibleArrayLayout<THeader, T>.GetRequiredBytes(capacity));
+        _ = new MutableFlexibleSpan<THeader, T>(memory.Span, header);
+        return new FlexibleArrayCore<THeader, T>(memory, 0, owner: null);
     }
 
     // The array never moves, so aligning the window once pins it for the object's lifetime.
