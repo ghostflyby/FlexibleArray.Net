@@ -61,6 +61,26 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
+    public void Create_WithAContentDerivedHeader_ValidatesTheWrittenTail()
+    {
+        // The length comes from a walk to the terminator, so the check must see the copied
+        // elements rather than the untouched buffer.
+        var buffer = new byte[8];
+        var view = MutableFlexibleSpan<CStrHeader, byte>.Create(buffer, new CStrHeader(), "abc"u8);
+
+        Assert.Equal(3, view.Length);
+        Assert.Equal("abc"u8.ToArray(), view.Elements.ToArray());
+    }
+
+    [Fact]
+    public void Create_WithAMismatchingDeclaredCount_RejectsTheRequest()
+    {
+        var buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
+        Assert.Throws<ArgumentException>(() =>
+            MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 2 }, ['a']));
+    }
+
+    [Fact]
     public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];

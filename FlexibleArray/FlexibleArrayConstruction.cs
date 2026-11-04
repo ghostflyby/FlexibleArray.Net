@@ -32,7 +32,8 @@ internal static class FlexibleArrayConstruction
     }
 
     // Without a write-back the declared length is the truth, so a request whose element count
-    // disagrees is rejected before the tail is written.
+    // disagrees is rejected. The check runs after the copy because the length may be derived
+    // from tail content — a sentinel walk over unwritten bytes would reject a valid request.
     private static void WriteDeclaredObject<THeader, T>(
         ref THeader destination,
         in THeader header,
@@ -41,13 +42,12 @@ internal static class FlexibleArrayConstruction
         where T : unmanaged
     {
         destination = header;
+        elements.CopyTo(MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref destination), elements.Length));
         if (THeader.GetTailElementCount(in destination) != elements.Length)
         {
             throw new ArgumentException(
                 $"The header-declared tail length does not match the {elements.Length} elements provided.");
         }
-
-        elements.CopyTo(MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref destination), elements.Length));
     }
 
     internal static void SetLength<THeader, T>(ref THeader header, int newLength)
