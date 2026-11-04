@@ -96,8 +96,8 @@ public ref struct MutableFlexibleSpan<THeader, T>
     }
 
     /// <summary>
-    /// Commits elements that were written in place into the free region, for
-    /// nested objects built at the tail, and updates the header's length field.
+    /// Commits elements written into the caller's buffer immediately after the committed
+    /// tail, for nested objects built in place, and updates the header's length field.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="elementCount"/> is negative or exceeds the free capacity.

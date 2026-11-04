@@ -44,19 +44,6 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
         }
     }
 
-    /// <summary>Gets the writable region between the committed length and the capacity, for in-place construction before <see cref="Advance"/>.</summary>
-    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    internal Span<T> FreeElements
-    {
-        get
-        {
-            _core.ThrowIfDisposed();
-            ref var header = ref _core.HeaderReference;
-            return MemoryMarshal.CreateSpan(
-                ref Unsafe.Add(ref THeader.GetFirstElement(ref header), Length), Capacity - Length);
-        }
-    }
-
     /// <summary>Appends one element and updates the header's length field.</summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The object is at capacity.</exception>
@@ -72,8 +59,8 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     public void AppendRange(ReadOnlySpan<T> items) => _core.AppendRange(items);
 
     /// <summary>
-    /// Commits elements that were written in place into the free region, for
-    /// nested objects built at the tail, and updates the header's length field.
+    /// Commits elements written into the caller's buffer immediately after the committed
+    /// tail, for nested objects built in place, and updates the header's length field.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
@@ -182,7 +169,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// Allocates managed backing on the pinned object heap with the byte length pre-sized for
     /// a tail capacity, and starts an empty object in it: the header is written with the tail
     /// length stamped to zero, leaving the whole capacity free for
-    /// <see cref="Append"/>, <see cref="AppendRange"/>, and <see cref="Advance"/>.
+    /// <see cref="Append"/> and <see cref="AppendRange"/>.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
     /// <exception cref="ArgumentException">

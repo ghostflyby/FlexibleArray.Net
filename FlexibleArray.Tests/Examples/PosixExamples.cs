@@ -188,7 +188,6 @@ public sealed unsafe class PosixExamples
         // Adopted storage has no known extent: capacity collapses to the declared length,
         // so no free region is exposed.
         Assert.Equal(array.Length, array.Capacity);
-        Assert.True(array.FreeElements.IsEmpty);
 
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Span; });

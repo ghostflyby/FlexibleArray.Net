@@ -393,10 +393,10 @@ public sealed class NetlinkExamples
             datagram, new NlmsgHeader { Type = Netlink.RtmNewlink, Seq = 1 });
         message.AppendRange(new byte[Netlink.IfinfomsgSize]);
         MutableFlexibleSpan<NlattrHeader, byte>.Create(
-            message.FreeElements, new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
+            datagram[(Netlink.NlmsgHdrlen + message.Length)..], new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
         message.Advance(Netlink.Align4(7));
         MutableFlexibleSpan<NlattrHeader, byte>.Create(
-            message.FreeElements, new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
+            datagram[(Netlink.NlmsgHdrlen + message.Length)..], new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
         message.Advance(Netlink.Align4(9));
         MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
         Assert.Equal(52, (int)message.Header.Len);
