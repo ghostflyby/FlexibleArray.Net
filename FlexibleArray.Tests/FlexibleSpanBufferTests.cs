@@ -15,6 +15,7 @@ public sealed class FlexibleSpanBufferTests
 
         var view = FlexibleSpan<PacketHeader, int>.Create(buffer);
         Assert.Equal(2, view.Length);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2), view.ByteLength);
         Assert.Equal(new[] { 7, 8 }, view.Elements.ToArray());
         Assert.Equal(2, view.Header.Count);
     }

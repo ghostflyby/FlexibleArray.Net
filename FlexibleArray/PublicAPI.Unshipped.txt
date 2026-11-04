@@ -75,3 +75,7 @@ FlexibleArray.FlexibleArray<THeader, T>.Length.get -> int
 static FlexibleArray.MutableFlexibleSpan<THeader, T>.Create(System.Span<byte> buffer) -> FlexibleArray.MutableFlexibleSpan<THeader, T>
 static FlexibleArray.FlexibleSpan<THeader, T>.Create(System.ReadOnlySpan<byte> buffer) -> FlexibleArray.FlexibleSpan<THeader, T>
 static FlexibleArray.MutableFlexibleArray<THeader, T>.Create(System.Memory<byte> buffer) -> FlexibleArray.MutableFlexibleArray<THeader, T>!
+FlexibleArray.MutableFlexibleSpan<THeader, T>.ByteLength.get -> int
+FlexibleArray.MutableFlexibleArray<THeader, T>.ByteLength.get -> int
+FlexibleArray.FlexibleSpan<THeader, T>.ByteLength.get -> int
+FlexibleArray.FlexibleArray<THeader, T>.ByteLength.get -> int

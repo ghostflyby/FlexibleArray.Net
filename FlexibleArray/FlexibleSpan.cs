@@ -35,6 +35,13 @@ public readonly ref struct FlexibleSpan<THeader, T>
     /// <summary>Gets the logical number of tail elements.</summary>
     public int Length => _length;
 
+    /// <summary>Gets the byte extent of the committed object, header included.</summary>
+    /// <remarks>
+    /// Counts the full header even when the tail is empty, so consecutive objects laid out at
+    /// this boundary do not overlap. Protocol alignment between objects is not included.
+    /// </remarks>
+    public int ByteLength => FlexibleArrayLayout<THeader, T>.GetRequiredBytes(_length);
+
     /// <summary>Gets a read-only reference to the header.</summary>
     public ref readonly THeader Header => ref _header;
 

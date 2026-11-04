@@ -17,6 +17,7 @@ public sealed class MutableFlexibleArrayTests
             new PacketHeader { Count = 3, Timestamp = 5 }, [7, 8, 9]);
 
         Assert.Equal(3, array.Length);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), array.ByteLength);
         Assert.Equal(5, array.Header.Timestamp);
         Assert.Equal(new[] { 7, 8, 9 }, array.Span.Elements.ToArray());
         // The tail copy landed in the placeholder field.
@@ -143,6 +144,7 @@ public sealed class MutableFlexibleArrayTests
             FlexibleArray<PacketHeader, int>.Create(buffer);
 
         Assert.Equal(2, memory.Length);
+        Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2), memory.ByteLength);
         Assert.Equal(new[] { 4, 5 }, memory.Span.Elements.ToArray());
     }
 

@@ -48,6 +48,13 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// <summary>Gets the logical number of tail elements.</summary>
     public int Length => _length;
 
+    /// <summary>Gets the byte extent of the committed object, header included.</summary>
+    /// <remarks>
+    /// Counts the full header even when the tail is empty, so consecutive objects laid out at
+    /// this boundary do not overlap. Protocol alignment between objects is not included.
+    /// </remarks>
+    public int ByteLength => FlexibleArrayLayout<THeader, T>.GetRequiredBytes(_length);
+
     /// <summary>Gets the element capacity of the backing storage; anchored views report their length.</summary>
     /// <remarks>Can exceed the committed count: header padding and pool-rental rounding are usable.</remarks>
     public int Capacity => _capacity;
@@ -99,6 +106,10 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// Commits elements written into the caller's buffer immediately after the committed
     /// tail, for nested objects built in place, and updates the header's length field.
     /// </summary>
+    /// <remarks>
+    /// The caller advances past the bytes it wrote, so the committed count is the nested
+    /// object's byte extent rounded up to whatever alignment the protocol requires.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="elementCount"/> is negative or exceeds the free capacity.
     /// </exception>
