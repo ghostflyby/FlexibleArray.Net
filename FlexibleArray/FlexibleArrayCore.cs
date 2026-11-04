@@ -75,56 +75,6 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
 
     internal void OnLengthStamped(int value) => _committedLength = value;
 
-    internal void Append(T item)
-    {
-        ThrowIfDisposed();
-        var length = _committedLength;
-        if (length == Capacity)
-        {
-            throw new InvalidOperationException("The flexible array is at capacity.");
-        }
-
-        ref var header = ref HeaderReference;
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref header, length + 1);
-        Unsafe.Add(ref THeader.GetFirstElement(ref header), length) = item;
-        _committedLength = length + 1;
-    }
-
-    internal void AppendRange(ReadOnlySpan<T> items)
-    {
-        ThrowIfDisposed();
-        if (items.Length > Capacity - _committedLength)
-        {
-            throw new InvalidOperationException($"The free capacity is {Capacity - _committedLength} elements but {items.Length} were given.");
-        }
-
-        ref var header = ref HeaderReference;
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref header, _committedLength + items.Length);
-        items.CopyTo(MemoryMarshal.CreateSpan(
-            ref Unsafe.Add(ref THeader.GetFirstElement(ref header), _committedLength), items.Length));
-        _committedLength += items.Length;
-    }
-
-    internal void Truncate(int length)
-    {
-        ThrowIfDisposed();
-        ArgumentOutOfRangeException.ThrowIfNegative(length);
-        if (length > _committedLength)
-        {
-            throw new ArgumentOutOfRangeException(nameof(length),
-                $"The truncate target {length} exceeds the committed length {_committedLength}.");
-        }
-
-        if (length == _committedLength)
-        {
-            return;
-        }
-
-        ref var header = ref HeaderReference;
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref header, length);
-        _committedLength = length;
-    }
-
     ~FlexibleArrayCore()
     {
         Release();

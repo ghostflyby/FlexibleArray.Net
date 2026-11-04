@@ -65,71 +65,12 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// <summary>Gets an element view covering the entire tail, including the first-element placeholder field.</summary>
     public Span<T> Elements => MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref _header), _length);
 
-    /// <summary>Gets the writable region between the committed length and the capacity, used by <see cref="AppendRange"/>.</summary>
+    /// <summary>Gets the writable region between the committed length and the capacity.</summary>
     internal Span<T> FreeElements => MemoryMarshal.CreateSpan(ref Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length), _capacity - _length);
 
-    /// <summary>Appends one element and updates the header's length field.</summary>
-    /// <exception cref="InvalidOperationException">The view is at capacity.</exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void Append(T item)
-    {
-        if (_length == _capacity)
-        {
-            throw new InvalidOperationException("The flexible array is at capacity.");
-        }
+    internal void SetLengthField(int value) => _length = value;
 
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + 1);
-        Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length) = item;
-        _length++;
-        _owner?.OnLengthStamped(_length);
-    }
-
-    /// <summary>Appends a range of elements and updates the header's length field.</summary>
-    /// <exception cref="InvalidOperationException">The range does not fit in the free capacity.</exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void AppendRange(ReadOnlySpan<T> items)
-    {
-        if (items.Length > _capacity - _length)
-        {
-            throw new InvalidOperationException($"The free capacity is {_capacity - _length} elements but {items.Length} were given.");
-        }
-
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + items.Length);
-        items.CopyTo(FreeElements);
-        _length += items.Length;
-        _owner?.OnLengthStamped(_length);
-    }
-
-    /// <summary>
-    /// Shrinks the committed length, updating the header's length field. The removal is
-    /// logical: the bytes stay in place and are overwritten by later appends; the capacity
-    /// does not change.
-    /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="length"/> is negative or greater than <see cref="Length"/>.
-    /// </exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void Truncate(int length)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(length);
-        if (length > _length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(length),
-                $"The truncate target {length} exceeds the committed length {_length}.");
-        }
-
-        if (length == _length)
-        {
-            return;
-        }
-
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, length);
-        _length = length;
-        _owner?.OnLengthStamped(_length);
-    }
+    internal void NotifyLengthStamped() => _owner?.OnLengthStamped(_length);
 
     /// <summary>
     /// Builds a complete object at the start of the buffer; alignment is the buffer's

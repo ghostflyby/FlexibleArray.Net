@@ -60,13 +60,7 @@ static FlexibleArray.MutableFlexibleSpan<THeader, T>.implicit operator FlexibleA
 static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator FlexibleArray.FlexibleArray<THeader, T>!(FlexibleArray.MutableFlexibleArray<THeader, T>? array) -> FlexibleArray.FlexibleArray<THeader, T>!
 static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator FlexibleArray.FlexibleSpan<THeader, T>(FlexibleArray.MutableFlexibleArray<THeader, T>? array) -> FlexibleArray.FlexibleSpan<THeader, T>
 FlexibleArray.MutableFlexibleArray<THeader, T>.Capacity.get -> int
-FlexibleArray.MutableFlexibleArray<THeader, T>.Append(T item) -> void
-FlexibleArray.MutableFlexibleArray<THeader, T>.AppendRange(System.ReadOnlySpan<T> items) -> void
-FlexibleArray.MutableFlexibleArray<THeader, T>.Truncate(int length) -> void
 FlexibleArray.MutableFlexibleSpan<THeader, T>.Capacity.get -> int
-FlexibleArray.MutableFlexibleSpan<THeader, T>.Append(T item) -> void
-FlexibleArray.MutableFlexibleSpan<THeader, T>.AppendRange(System.ReadOnlySpan<T> items) -> void
-FlexibleArray.MutableFlexibleSpan<THeader, T>.Truncate(int length) -> void
 FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>
 static FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>.ConvertToManaged(THeader* pointer) -> FlexibleArray.MutableFlexibleArray<THeader, T>?
 FlexibleArray.FlexibleArray<THeader, T>.Length.get -> int
@@ -77,3 +71,10 @@ FlexibleArray.MutableFlexibleSpan<THeader, T>.ByteLength.get -> int
 FlexibleArray.MutableFlexibleArray<THeader, T>.ByteLength.get -> int
 FlexibleArray.FlexibleSpan<THeader, T>.ByteLength.get -> int
 FlexibleArray.FlexibleArray<THeader, T>.ByteLength.get -> int
+FlexibleArray.FlexibleArrayExtensions
+static FlexibleArray.FlexibleArrayExtensions.Append<THeader, T>(this ref FlexibleArray.MutableFlexibleSpan<THeader, T> span, T item) -> void
+static FlexibleArray.FlexibleArrayExtensions.AppendRange<THeader, T>(this ref FlexibleArray.MutableFlexibleSpan<THeader, T> span, System.ReadOnlySpan<T> items) -> void
+static FlexibleArray.FlexibleArrayExtensions.Truncate<THeader, T>(this ref FlexibleArray.MutableFlexibleSpan<THeader, T> span, int length) -> void
+static FlexibleArray.FlexibleArrayExtensions.Append<THeader, T>(this FlexibleArray.MutableFlexibleArray<THeader, T>! array, T item) -> void
+static FlexibleArray.FlexibleArrayExtensions.AppendRange<THeader, T>(this FlexibleArray.MutableFlexibleArray<THeader, T>! array, System.ReadOnlySpan<T> items) -> void
+static FlexibleArray.FlexibleArrayExtensions.Truncate<THeader, T>(this FlexibleArray.MutableFlexibleArray<THeader, T>! array, int length) -> void
