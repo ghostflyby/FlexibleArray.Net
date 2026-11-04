@@ -19,16 +19,17 @@ internal static class FlexibleArrayConstruction
     }
 
     internal static void SetLength<THeader, T>(ref THeader header, int newLength)
-        where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
+        where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>, IConstructibleFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
-        if (header is not IConstructibleFlexibleArrayHeader<THeader, T> constructible)
+        var stamped = header.WithTailElementCount(newLength);
+        if (THeader.GetTailElementCount(in stamped) != newLength)
         {
-            throw new NotSupportedException(
-                "The header registers no tail-length write-back, so its length cannot be changed.");
+            throw new InvalidOperationException(
+                $"Setting the tail element count to {newLength} did not read back the same value.");
         }
 
-        header = StampVerified(constructible, newLength);
+        header = stamped;
     }
 
     private static THeader StampVerified<THeader, T>(

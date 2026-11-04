@@ -259,14 +259,8 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Mutations_RequireAWriteBack_AndDisposedObjectsRejectThem()
+    public void DisposedObjectsRejectMutations()
     {
-        // With room to spare the bounds checks pass, so the mutation reaches the capability
-        // gate and fails there instead.
-        using var noWriteBack = MutableFlexibleArray<DoubleTagOriginal, int>.Create(
-            new DoubleTagOriginal(), capacity: 1);
-        Assert.Throws<NotSupportedException>(() => noWriteBack.Append(1));
-
         var array = MutableFlexibleArray<PacketHeader, int>.Create(new PacketHeader(), 1);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => array.Append(1));
@@ -283,7 +277,8 @@ public sealed class MutableFlexibleArrayTests
             new PacketHeader { Timestamp = 3 }, [1, 2, 3]);
 
         Assert.Equal(array.Length, array.Span.Capacity);
-        array.Span.Truncate(1);
+        var projection = array.Span;
+        projection.Truncate(1);
         Assert.Equal(1, array.Length);
         Assert.Equal(1, array.Header.Count);
 

@@ -32,6 +32,16 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
         }
     }
 
+    internal ref THeader HeaderReference => ref _core.HeaderReference;
+
+    internal int LengthValue => _core.CommittedLength;
+
+    internal int CapacityValue => _core.Capacity;
+
+    internal void SetCommittedLength(int value) => _core.OnLengthStamped(value);
+
+    internal void ThrowIfDisposedInternal() => _core.ThrowIfDisposed();
+
     /// <summary>Gets the element capacity of the backing storage; adopted native objects report their committed length.</summary>
     /// <remarks>Can exceed the committed count: header padding and pool-rental rounding are usable.</remarks>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
@@ -43,33 +53,6 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
             return _core.Capacity;
         }
     }
-
-    /// <summary>Appends one element and updates the header's length field.</summary>
-    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">The object is at capacity.</exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void Append(T item) => _core.Append(item);
-
-    /// <summary>Appends a range of elements and updates the header's length field.</summary>
-    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    /// <exception cref="InvalidOperationException">The range does not fit in the free capacity.</exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void AppendRange(ReadOnlySpan<T> items) => _core.AppendRange(items);
-
-    /// <summary>
-    /// Shrinks the committed length, updating the header's length field. The removal is
-    /// logical: the bytes stay in place and are overwritten by later appends; the capacity
-    /// does not change.
-    /// </summary>
-    /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="length"/> is negative or greater than the committed length.
-    /// </exception>
-    /// <exception cref="NotSupportedException">The header registers no tail-length write-back.</exception>
-    /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public void Truncate(int length) => _core.Truncate(length);
 
     /// <summary>
     /// Builds a complete object on the pinned object heap, starting at the required
@@ -157,7 +140,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// Allocates managed backing on the pinned object heap with the byte length pre-sized for
     /// a tail capacity, and starts an empty object in it: the header is written with the tail
     /// length stamped to zero, leaving the whole capacity free for
-    /// <see cref="Append"/> and <see cref="AppendRange"/>.
+    /// appending.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
     /// <exception cref="ArgumentException">
