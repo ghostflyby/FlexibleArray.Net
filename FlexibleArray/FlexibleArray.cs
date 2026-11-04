@@ -26,7 +26,7 @@ public sealed class FlexibleArray<THeader, T> : IDisposable
     }
 
     /// <summary>
-    /// Creates a read-only object over a buffer that already holds a complete object: the
+    /// Wraps a buffer that already holds a complete object: the
     /// buffer is not written, and the tail length is derived from the header contract and
     /// validated against the buffer extent. Alignment is not validated.
     /// </summary>
@@ -34,7 +34,7 @@ public sealed class FlexibleArray<THeader, T> : IDisposable
     /// <exception cref="ArgumentException">
     /// The buffer is too short for the header or for the derived tail length.
     /// </exception>
-    public static FlexibleArray<THeader, T> Create(ReadOnlyMemory<byte> buffer)
+    public static FlexibleArray<THeader, T> Wrap(ReadOnlyMemory<byte> buffer)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {

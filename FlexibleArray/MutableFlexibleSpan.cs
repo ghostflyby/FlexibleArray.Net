@@ -81,7 +81,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// <exception cref="ArgumentException">
     /// The buffer is too short for the header or for the derived tail length.
     /// </exception>
-    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer)
+    public static MutableFlexibleSpan<THeader, T> Wrap(Span<byte> buffer)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {
@@ -114,7 +114,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
     /// <exception cref="OverflowException">The required backing exceeds <see cref="int"/> bytes.</exception>
-    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
+    public MutableFlexibleSpan(Span<byte> buffer, in THeader header, ReadOnlySpan<T> elements)
     {
         var requiredBytes = FlexibleArrayLayout<THeader, T>.GetRequiredBytes(elements.Length);
         if (buffer.Length < requiredBytes)
@@ -125,7 +125,10 @@ public ref struct MutableFlexibleSpan<THeader, T>
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         ref var destination = ref Unsafe.As<byte, THeader>(ref firstByte);
         FlexibleArrayConstruction.WriteObject(ref destination, header, elements);
-        return new MutableFlexibleSpan<THeader, T>(ref destination, elements.Length, ElementCapacity(buffer.Length));
+        _header = ref destination;
+        _length = elements.Length;
+        _capacity = ElementCapacity(buffer.Length);
+        _owner = null;
     }
 
     /// <summary>Starts an empty object at the start of the buffer, with the whole buffer's element capacity free.</summary>
@@ -134,7 +137,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
     /// declares a nonzero tail length.
     /// </exception>
     /// <exception cref="InvalidOperationException">The header's length write-back and read-back disagree.</exception>
-    public static MutableFlexibleSpan<THeader, T> Create(Span<byte> buffer, in THeader header)
+    public MutableFlexibleSpan(Span<byte> buffer, in THeader header)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {
@@ -144,7 +147,10 @@ public ref struct MutableFlexibleSpan<THeader, T>
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         ref var destination = ref Unsafe.As<byte, THeader>(ref firstByte);
         FlexibleArrayConstruction.WriteObject(ref destination, header, ReadOnlySpan<T>.Empty);
-        return new MutableFlexibleSpan<THeader, T>(ref destination, 0, ElementCapacity(buffer.Length));
+        _header = ref destination;
+        _length = 0;
+        _capacity = ElementCapacity(buffer.Length);
+        _owner = null;
     }
 
     private static int ElementCapacity(int byteLength)

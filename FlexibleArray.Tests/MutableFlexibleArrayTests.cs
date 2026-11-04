@@ -11,10 +11,10 @@ namespace FlexibleArray.Tests;
 public sealed class MutableFlexibleArrayTests
 {
     [Fact]
-    public void Create_WithManagedBacking_BuildsCompleteObject()
+    public void Construct_WithManagedBacking_BuildsCompleteObject()
     {
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
-            new PacketHeader { Count = 3, Timestamp = 5 }, [7, 8, 9]);
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
+            new PacketHeader { Timestamp = 5 }, [7, 8, 9]);
 
         Assert.Equal(3, array.Length);
         Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), array.ByteLength);
@@ -25,43 +25,45 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Create_WithAllocator_UsesProvidedStorage()
+    public void Construct_WithAllocator_UsesProvidedStorage()
     {
         var requested = 0;
         Memory<byte> storage = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
             byteLength =>
             {
                 requested = byteLength;
                 return storage;
             },
-            new PacketHeader { Count = 2 }, [3, 4]);
+            new PacketHeader(), [3, 4]);
 
         Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2), requested);
+        Assert.Equal(2, array.Header.Count);
         Assert.Equal(new[] { 3, 4 }, array.Span.Elements.ToArray());
         // The object was built directly in the caller's storage; element 0 lives at offset 16.
         Assert.Equal(3, BitConverter.ToInt32(storage.Span[16..]));
     }
 
     [Fact]
-    public void Create_OverExistingMemory_BuildsContent()
+    public void Construct_OverExistingMemory_BuildsContent()
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
-            buffer, new PacketHeader { Count = 2 }, [8, 9]);
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
+            buffer, new PacketHeader(), [8, 9]);
 
+        Assert.Equal(2, array.Header.Count);
         Assert.Equal(new[] { 8, 9 }, array.Span.Elements.ToArray());
         Assert.Equal(8, BitConverter.ToInt32(buffer.Span[16..]));
     }
 
     [Fact]
-    public void Create_OnFormedBuffer_DerivesLengthFromTheHeader()
+    public void Wrap_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        _ = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [8, 9]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer.Span, new PacketHeader(), [8, 9]);
         var expected = buffer.ToArray();
 
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer);
+        using var array = MutableFlexibleArray<PacketHeader, int>.Wrap(buffer);
 
         Assert.Equal(2, array.Length);
         Assert.Equal(2, array.Capacity);
@@ -70,36 +72,41 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Create_OnFormedBuffer_RejectsInvalidDerivedLengths()
+    public void Wrap_OnFormedBuffer_RejectsInvalidDerivedLengths()
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [8, 9]);
+        using var array = new MutableFlexibleArray<PacketHeader, int>(buffer, new PacketHeader(), [8, 9]);
 
         array.Header = new PacketHeader { Count = -1 };
-        Assert.Throws<ArgumentOutOfRangeException>(() => MutableFlexibleArray<PacketHeader, int>.Create(buffer));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MutableFlexibleArray<PacketHeader, int>.Wrap(buffer));
 
         array.Header = new PacketHeader { Count = 99 };
-        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(buffer));
+        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Wrap(buffer));
 
-        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(new byte[8]));
+        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Wrap(new byte[8]));
     }
 
     [Fact]
-    public void Create_RejectsInvalidAllocatorResultsAndCountMismatch()
+    public void Construct_RejectsInvalidAllocatorResultsAndCountMismatch()
     {
-        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<PacketHeader, int>.Create(
-            static _ => Memory<byte>.Empty, new PacketHeader { Count = 1 }, [1]));
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new MutableFlexibleArray<PacketHeader, int>(
+                static _ => Memory<byte>.Empty, new PacketHeader(), [1]);
+        });
         // Declared-length rejection belongs to headers without a registered write-back:
         // a constructible header's count is stamped from the elements instead.
-        Assert.Throws<ArgumentException>(() => MutableFlexibleArray<DoubleTagOriginal, int>.Create(
-            new DoubleTagOriginal(), [1]));
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new MutableFlexibleArray<DoubleTagOriginal, int>(new DoubleTagOriginal(), [1]);
+        });
     }
 
     [Fact]
-    public void Create_WithZeroElements_PreservesPlaceholder()
+    public void Construct_WithZeroElements_PreservesPlaceholder()
     {
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
-            new PacketHeader { Count = 0, FirstElement = -1 }, ReadOnlySpan<int>.Empty);
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
+            new PacketHeader { FirstElement = -1 }, ReadOnlySpan<int>.Empty);
 
         Assert.Equal(0, array.Length);
         Assert.True(array.Span.Elements.IsEmpty);
@@ -107,23 +114,23 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Create_WithNonBlittableElements_RoundTrips()
+    public void Construct_WithNonBlittableElements_RoundTrips()
     {
-        using var chars = MutableFlexibleArray<CharHeader, char>.Create(
+        using var chars = new MutableFlexibleArray<CharHeader, char>(
             new CharHeader { Count = 3 }, ['a', 'b', 'c']);
         Assert.Equal(new[] { 'a', 'b', 'c' }, chars.Span.Elements.ToArray());
         Assert.Equal('a', chars.Header.FirstElement);
 
-        using var bools = MutableFlexibleArray<BoolHeader, bool>.Create(
+        using var bools = new MutableFlexibleArray<BoolHeader, bool>(
             new BoolHeader { Id = 7, Count = 3 }, [true, false, true]);
         Assert.Equal(new[] { true, false, true }, bools.Span.Elements.ToArray());
         Assert.Equal(7, bools.Header.Id);
     }
 
     [Fact]
-    public unsafe void Create_WithManagedBacking_GuaranteesRequiredAlignment()
+    public unsafe void Construct_WithManagedBacking_GuaranteesRequiredAlignment()
     {
-        using var array = MutableFlexibleArray<Vector128Header, byte>.Create(
+        using var array = new MutableFlexibleArray<Vector128Header, byte>(
             new Vector128Header { Count = 3 }, [1, 2, 3]);
 
         var view = array.Span;
@@ -135,13 +142,13 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
+    public void Wrap_ReadOnlyOverExistingMemory_ReadsTail()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [4, 5, 6]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [4, 5, 6]);
 
         using var memory =
-            FlexibleArray<PacketHeader, int>.Create(buffer);
+            FlexibleArray<PacketHeader, int>.Wrap(buffer);
 
         Assert.Equal(3, memory.Length);
         Assert.Equal(FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3), memory.ByteLength);
@@ -150,26 +157,26 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void ReadOnlyCreate_OnFormedBuffer_RejectsInvalidDerivedLengths()
+    public void Wrap_ReadOnlyOnFormedBuffer_RejectsInvalidDerivedLengths()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        var span = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Count = 2 }, [4, 5]);
+        var span = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [4, 5]);
 
-        using var memory = FlexibleArray<PacketHeader, int>.Create(buffer);
+        using var memory = FlexibleArray<PacketHeader, int>.Wrap(buffer);
         Assert.Equal(2, memory.Length);
 
         span.Header = new PacketHeader { Count = -1 };
-        Assert.Throws<ArgumentOutOfRangeException>(() => FlexibleArray<PacketHeader, int>.Create(buffer));
+        Assert.Throws<ArgumentOutOfRangeException>(() => FlexibleArray<PacketHeader, int>.Wrap(buffer));
 
         span.Header = new PacketHeader { Count = 99 };
-        Assert.Throws<ArgumentException>(() => FlexibleArray<PacketHeader, int>.Create(buffer));
+        Assert.Throws<ArgumentException>(() => FlexibleArray<PacketHeader, int>.Wrap(buffer));
     }
 
     [Fact]
     public void ReferenceConversion_WritableIsAReadOnly()
     {
-        var array = MutableFlexibleArray<PacketHeader, int>.Create(
-            new PacketHeader { Count = 2 }, [5, 6]);
+        var array = new MutableFlexibleArray<PacketHeader, int>(
+            new PacketHeader(), [5, 6]);
         FlexibleArray<PacketHeader, int> readOnly = array;
 
         Assert.Equal(2, readOnly.Length);
@@ -182,37 +189,41 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Create_FromPool_DisposeReturnsTheRental()
+    public void Construct_FromPool_DisposeReturnsTheRental()
     {
-        var array = MemoryPool<byte>.Shared.Create(
-            new PacketHeader { Count = 3, Timestamp = 4 }, [1, 2, 3]);
+        var pool = new TrackingPool();
+        var array = new MutableFlexibleArray<PacketHeader, int>(
+            pool, new PacketHeader { Timestamp = 4 }, [1, 2, 3]);
 
         Assert.Equal(3, array.Length);
+        Assert.Equal(3, array.Header.Count);
         Assert.Equal(new[] { 1, 2, 3 }, array.Span.Elements.ToArray());
+        Assert.Equal(0, pool.Returned);
 
         array.Dispose();
+        Assert.Equal(1, pool.Returned);
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Span; });
         array.Dispose();
     }
 
     [Fact]
-    public void Create_StampsCountAcrossAllStoragePaths()
+    public void Construct_StampsCountAcrossAllStoragePaths()
     {
         // Every storage path derives the tail length from the element count when the header
         // registers a write-back: no Count on any call site.
-        using var managed = MutableFlexibleArray<PacketHeader, int>.Create(
+        using var managed = new MutableFlexibleArray<PacketHeader, int>(
             new PacketHeader { Timestamp = 1 }, [1, 2]);
-        using var pooled = MemoryPool<byte>.Shared.Create(
-            new PacketHeader { Timestamp = 2 }, [3]);
+        using var pooled = new MutableFlexibleArray<PacketHeader, int>(
+            MemoryPool<byte>.Shared, new PacketHeader { Timestamp = 2 }, [3]);
 
         Assert.Equal(2, managed.Header.Count);
         Assert.Equal(1, pooled.Header.Count);
     }
 
     [Fact]
-    public void Create_WithCapacity_StartsEmpty()
+    public void Construct_WithCapacity_StartsEmpty()
     {
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
             new PacketHeader { Count = 99, Timestamp = 5 }, capacity: 3);
 
         Assert.Equal(0, array.Length);
@@ -222,7 +233,7 @@ public sealed class MutableFlexibleArrayTests
 
         // A surplus buffer contributes its element capacity through the same property.
         Memory<byte> big = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(1) + sizeof(int)];
-        using var over = MutableFlexibleArray<PacketHeader, int>.Create(big, new PacketHeader(), [1]);
+        using var over = new MutableFlexibleArray<PacketHeader, int>(big, new PacketHeader(), [1]);
         Assert.Equal(1, over.Length);
         Assert.Equal(3, over.Capacity);
     }
@@ -230,7 +241,7 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void Append_GrowsAndStamps_ThroughProjections()
     {
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(new PacketHeader { Timestamp = 9 }, 3);
+        using var array = new MutableFlexibleArray<PacketHeader, int>(new PacketHeader { Timestamp = 9 }, 3);
 
         array.Append(1);
         array.AppendRange([2, 3]);
@@ -244,7 +255,7 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void Truncate_ShrinksLogically_ThroughProjections()
     {
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
             new PacketHeader { Timestamp = 9 }, [1, 2, 3]);
 
         array.Truncate(1);
@@ -261,7 +272,7 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void DisposedObjectsRejectMutations()
     {
-        var array = MutableFlexibleArray<PacketHeader, int>.Create(new PacketHeader(), 1);
+        var array = new MutableFlexibleArray<PacketHeader, int>(new PacketHeader(), 1);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => array.Append(1));
         Assert.Throws<ObjectDisposedException>(() => array.Truncate(0));
@@ -274,7 +285,7 @@ public sealed class MutableFlexibleArrayTests
         var fields = MemoryMarshal.Cast<byte, int>(buffer.AsSpan());
         fields[0] = 1;
         fields[1] = 5;
-        using var array = MutableFlexibleArray<BrokenSetHeader, int>.Create(buffer);
+        using var array = MutableFlexibleArray<BrokenSetHeader, int>.Wrap(buffer);
         Assert.Equal(1, array.Length);
 
         Assert.Throws<InvalidOperationException>(() => array.Append(7));
@@ -290,7 +301,7 @@ public sealed class MutableFlexibleArrayTests
         // Every stamp — including one through a held projection, with no object member
         // involved — is reported back to the object, so the cached committed length and the
         // header's length field stay in lockstep.
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
             new PacketHeader { Timestamp = 3 }, [1, 2, 3]);
 
         Assert.Equal(array.Length, array.Span.Capacity);
@@ -307,7 +318,7 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void SpanSnapshot_KeepsCapturedStateBetweenMutations()
     {
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(
+        using var array = new MutableFlexibleArray<PacketHeader, int>(
             new PacketHeader { Timestamp = 3 }, [1, 2, 3]);
         var stale = array.Span;
 
@@ -335,12 +346,12 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Create_FromPool_ExposesRentalSurplusAsCapacity()
+    public void Construct_FromPool_ExposesRentalSurplusAsCapacity()
     {
         // Pool rentals are rounded up, and the surplus is genuinely usable: appending into
         // it succeeds without any reallocation.
-        var array = MemoryPool<byte>.Shared.Create(
-            new PacketHeader { Timestamp = 1 }, [1, 2]);
+        var array = new MutableFlexibleArray<PacketHeader, int>(
+            MemoryPool<byte>.Shared, new PacketHeader { Timestamp = 1 }, [1, 2]);
         try
         {
             Assert.True(array.Capacity >= 2);
@@ -363,8 +374,8 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void Dispose_OfManagedObject_CollectsWithTheGc()
     {
-        var array = MutableFlexibleArray<PacketHeader, int>.Create(
-            new PacketHeader { Count = 1 }, [1]);
+        var array = new MutableFlexibleArray<PacketHeader, int>(
+            new PacketHeader(), [1]);
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Span; });
         Assert.Throws<ObjectDisposedException>(() => { _ = array.Header; });
@@ -373,8 +384,8 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public unsafe void Pin_ReturnsStableObjectPointer()
     {
-        var array = MutableFlexibleArray<PacketHeader, int>.Create(
-            new PacketHeader { Count = 2, Timestamp = 9 }, [4, 5]);
+        var array = new MutableFlexibleArray<PacketHeader, int>(
+            new PacketHeader { Timestamp = 9 }, [4, 5]);
 
         using var handle = array.Pin();
         ref var header = ref Unsafe.AsRef<PacketHeader>(handle.Pointer);
@@ -383,5 +394,37 @@ public sealed class MutableFlexibleArrayTests
 
         array.Dispose();
         Assert.Throws<ObjectDisposedException>(() => array.Pin());
+    }
+
+    private sealed class TrackingPool : MemoryPool<byte>
+    {
+        public int Returned { get; private set; }
+
+        public override int MaxBufferSize => int.MaxValue;
+
+        public override IMemoryOwner<byte> Rent(int minBufferSize = -1)
+            => new TrackingOwner(new byte[Math.Max(minBufferSize, 1)], () => Returned++);
+
+        protected override void Dispose(bool disposing)
+        {
+        }
+
+        private sealed class TrackingOwner(byte[] buffer, Action onDispose) : IMemoryOwner<byte>
+        {
+            private byte[]? _buffer = buffer;
+
+            public Memory<byte> Memory => _buffer ?? Memory<byte>.Empty;
+
+            public void Dispose()
+            {
+                if (_buffer is null)
+                {
+                    return;
+                }
+
+                _buffer = null;
+                onDispose();
+            }
+        }
     }
 }
