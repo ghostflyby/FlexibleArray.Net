@@ -46,7 +46,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
 
     /// <summary>Gets the writable region between the committed length and the capacity, for in-place construction before <see cref="Advance"/>.</summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
-    public Span<T> FreeElements
+    internal Span<T> FreeElements
     {
         get
         {
@@ -72,7 +72,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     public void AppendRange(ReadOnlySpan<T> items) => _core.AppendRange(items);
 
     /// <summary>
-    /// Commits elements that were written in place through <see cref="FreeElements"/>, for
+    /// Commits elements that were written in place into the free region, for
     /// nested objects built at the tail, and updates the header's length field.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The object has been disposed.</exception>
