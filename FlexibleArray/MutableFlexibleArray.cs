@@ -156,7 +156,7 @@ public sealed unsafe class MutableFlexibleArray<THeader, T> : IDisposable
     /// <exception cref="ArgumentException">
     /// The buffer is too short for the header or for the derived tail length.
     /// </exception>
-    public static unsafe MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer)
+    public static MutableFlexibleArray<THeader, T> Create(Memory<byte> buffer)
     {
         if (buffer.Length < FlexibleArrayLayout<THeader, T>.HeaderSize)
         {
