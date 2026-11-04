@@ -124,7 +124,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
 
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         ref var destination = ref Unsafe.As<byte, THeader>(ref firstByte);
-        FlexibleArrayConstruction.WriteObject(ref destination, header, elements);
+        FlexibleArrayConstruction.WriteObject(out destination, header, elements);
         _header = ref destination;
         _length = elements.Length;
         _capacity = ElementCapacity(buffer.Length);
@@ -146,7 +146,7 @@ public ref struct MutableFlexibleSpan<THeader, T>
 
         ref var firstByte = ref MemoryMarshal.GetReference(buffer);
         ref var destination = ref Unsafe.As<byte, THeader>(ref firstByte);
-        FlexibleArrayConstruction.WriteObject(ref destination, header, ReadOnlySpan<T>.Empty);
+        FlexibleArrayConstruction.WriteObject(out destination, header, ReadOnlySpan<T>.Empty);
         _header = ref destination;
         _length = 0;
         _capacity = ElementCapacity(buffer.Length);
