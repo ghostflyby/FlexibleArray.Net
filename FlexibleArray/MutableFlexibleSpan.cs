@@ -79,8 +79,10 @@ public ref struct MutableFlexibleSpan<THeader, T>
             throw new InvalidOperationException("The flexible array is at capacity.");
         }
 
+        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + 1);
         Unsafe.Add(ref THeader.GetFirstElement(ref _header), _length) = item;
-        Advance(1);
+        _length++;
+        _owner?.OnLengthStamped(_length);
     }
 
     /// <summary>Appends a range of elements and updates the header's length field.</summary>
@@ -94,28 +96,9 @@ public ref struct MutableFlexibleSpan<THeader, T>
             throw new InvalidOperationException($"The free capacity is {_capacity - _length} elements but {items.Length} were given.");
         }
 
+        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + items.Length);
         items.CopyTo(FreeElements);
-        Advance(items.Length);
-    }
-
-    // The commit primitive behind Append and AppendRange: the bytes are in place, and this
-    // stamps the header and the tracked length together.
-    private void Advance(int elementCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(elementCount);
-        if (elementCount == 0)
-        {
-            return;
-        }
-
-        if (elementCount > _capacity - _length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(elementCount),
-                $"The advance is {elementCount} elements but the free capacity is {_capacity - _length}.");
-        }
-
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref _header, _length + elementCount);
-        _length += elementCount;
+        _length += items.Length;
         _owner?.OnLengthStamped(_length);
     }
 

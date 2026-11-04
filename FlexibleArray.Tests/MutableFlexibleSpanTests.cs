@@ -272,6 +272,30 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
+    public void Append_WithoutAWriteBack_LeavesTheStorageUntouched()
+    {
+        // CStrHeader derives its length by walking to the first zero byte, so writing the
+        // terminator before the capability gate would silently change the object.
+        var buffer = new byte[4];
+        buffer[0] = 1;
+        buffer[1] = 2;
+        var view = MutableFlexibleSpan<CStrHeader, byte>.Create(buffer);
+        Assert.Equal(2, view.Length);
+
+        try
+        {
+            view.Append(3);
+            Assert.Fail("Appending to a header without a write-back must throw.");
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        Assert.Equal(0, buffer[2]);
+        Assert.Equal(2, FlexibleSpan<CStrHeader, byte>.Create(buffer).Length);
+    }
+
+    [Fact]
     public void Mutations_RequireAWriteBack()
     {
         // CharHeader reads its length from a count field but registers no write-back, so a
