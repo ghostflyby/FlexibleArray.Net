@@ -58,7 +58,7 @@ public sealed class MutableFlexibleArrayTests
     public void Wrap_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Memory<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(buffer.Span, new PacketHeader { Count = 2 }, [8, 9]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer.Span, new PacketHeader { Count = 2 }, [8, 9]);
         var expected = buffer.ToArray();
 
         using var array = MutableFlexibleArray<PacketHeader, int>.Wrap(buffer);
@@ -87,12 +87,17 @@ public sealed class MutableFlexibleArrayTests
     [Fact]
     public void Construct_RejectsInvalidAllocatorResultsAndCountMismatch()
     {
-        Assert.Throws<ArgumentException>(() => new MutableFlexibleArray<PacketHeader, int>(
-            static _ => Memory<byte>.Empty, new PacketHeader { Count = 1 }, [1]));
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new MutableFlexibleArray<PacketHeader, int>(
+                static _ => Memory<byte>.Empty, new PacketHeader { Count = 1 }, [1]);
+        });
         // Declared-length rejection belongs to headers without a registered write-back:
         // a constructible header's count is stamped from the elements instead.
-        Assert.Throws<ArgumentException>(() => new MutableFlexibleArray<DoubleTagOriginal, int>(
-            new DoubleTagOriginal(), [1]));
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new MutableFlexibleArray<DoubleTagOriginal, int>(new DoubleTagOriginal(), [1]);
+        });
     }
 
     [Fact]
@@ -138,7 +143,7 @@ public sealed class MutableFlexibleArrayTests
     public void ReadOnlyCreate_OverExistingMemory_ReadsTail()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        TestBuffers.Build(buffer, new PacketHeader(), [4, 5, 6]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [4, 5, 6]);
 
         using var memory =
             FlexibleArray<PacketHeader, int>.Wrap(buffer);

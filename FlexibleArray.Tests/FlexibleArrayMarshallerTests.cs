@@ -104,7 +104,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
             new PacketHeader { Count = 2, Timestamp = 12345 }, [10, 20]);
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
 
         fixed (byte* right = expected)
         {
@@ -130,7 +130,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         array.Append(20);
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(expected, new PacketHeader { Timestamp = 77 }, [10, 20]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(expected, new PacketHeader { Timestamp = 77 }, [10, 20]);
 
         fixed (byte* right = expected)
         {
@@ -142,7 +142,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void ConvertToManaged_AnchorsViewAtReturnedPointer()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(buffer, new PacketHeader(), [7, 8]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [7, 8]);
 
         fixed (byte* pointer = buffer)
         {
@@ -159,7 +159,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
     public void ConvertToManaged_AnchorsWritableSpanAtReturnedPointer()
     {
         var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(buffer, new PacketHeader(), [5, 0]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader(), [5, 0]);
 
         fixed (byte* pointer = buffer)
         {
@@ -236,7 +236,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         FlexibleSpan<PacketHeader, int> view = array.Span;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(expected, new PacketHeader { Timestamp = 77 }, [30, 40]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(expected, new PacketHeader { Timestamp = 77 }, [30, 40]);
 
         fixed (byte* right = expected)
         {
@@ -278,7 +278,7 @@ public sealed unsafe class FlexibleArrayMarshallerTests
         FlexibleArray<PacketHeader, int> readOnly = array;
 
         Span<byte> expected = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        TestBuffers.Build(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(expected, new PacketHeader { Timestamp = 12345 }, [10, 20]);
 
         fixed (byte* right = expected)
         {

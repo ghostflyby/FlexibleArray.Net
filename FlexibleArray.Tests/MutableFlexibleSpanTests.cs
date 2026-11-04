@@ -77,14 +77,14 @@ public sealed class MutableFlexibleSpanTests
     {
         var buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
         Assert.Throws<ArgumentException>(() =>
-            new MutableFlexibleSpan<CharHeader, char>(buffer, new CharHeader { Count = 2 }, ['a']));
+            _ = new MutableFlexibleSpan<CharHeader, char>(buffer, new CharHeader { Count = 2 }, ['a']));
     }
 
     [Fact]
     public void Wrap_OnFormedBuffer_DerivesLengthFromTheHeader()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        TestBuffers.Build(buffer, new PacketHeader { Count = 2 }, [7, 8]);
+        _ = new MutableFlexibleSpan<PacketHeader, int>(buffer, new PacketHeader { Count = 2 }, [7, 8]);
         var expected = buffer.ToArray();
 
         var view = MutableFlexibleSpan<PacketHeader, int>.Wrap(buffer);
@@ -169,7 +169,7 @@ public sealed class MutableFlexibleSpanTests
         Assert.Throws<InvalidOperationException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<BrokenSetHeader, int>.GetRequiredBytes(1)];
-            new MutableFlexibleSpan<BrokenSetHeader, int>(buffer, new BrokenSetHeader(), [1]);
+            _ = new MutableFlexibleSpan<BrokenSetHeader, int>(buffer, new BrokenSetHeader(), [1]);
         });
     }
 
@@ -197,7 +197,7 @@ public sealed class MutableFlexibleSpanTests
         Assert.Throws<ArgumentException>(() =>
         {
             Span<byte> small = new byte[FlexibleArrayLayout<DoubleTagOriginal, int>.GetRequiredBytes(1)];
-            new MutableFlexibleSpan<DoubleTagOriginal, int>(small, new DoubleTagOriginal(), [1]);
+            _ = new MutableFlexibleSpan<DoubleTagOriginal, int>(small, new DoubleTagOriginal(), [1]);
         });
     }
 
