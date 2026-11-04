@@ -62,12 +62,10 @@ static FlexibleArray.MutableFlexibleArray<THeader, T>.implicit operator Flexible
 FlexibleArray.MutableFlexibleArray<THeader, T>.Capacity.get -> int
 FlexibleArray.MutableFlexibleArray<THeader, T>.Append(T item) -> void
 FlexibleArray.MutableFlexibleArray<THeader, T>.AppendRange(System.ReadOnlySpan<T> items) -> void
-FlexibleArray.MutableFlexibleArray<THeader, T>.Advance(int elementCount) -> void
 FlexibleArray.MutableFlexibleArray<THeader, T>.Truncate(int length) -> void
 FlexibleArray.MutableFlexibleSpan<THeader, T>.Capacity.get -> int
 FlexibleArray.MutableFlexibleSpan<THeader, T>.Append(T item) -> void
 FlexibleArray.MutableFlexibleSpan<THeader, T>.AppendRange(System.ReadOnlySpan<T> items) -> void
-FlexibleArray.MutableFlexibleSpan<THeader, T>.Advance(int elementCount) -> void
 FlexibleArray.MutableFlexibleSpan<THeader, T>.Truncate(int length) -> void
 FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>
 static FlexibleArray.MutableFlexibleArrayOwnedMarshaller<THeader, T>.ConvertToManaged(THeader* pointer) -> FlexibleArray.MutableFlexibleArray<THeader, T>?

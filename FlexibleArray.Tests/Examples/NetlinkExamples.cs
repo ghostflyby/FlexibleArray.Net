@@ -385,19 +385,21 @@ public sealed class NetlinkExamples
         // One RTM_NEWLINK message: nlmsghdr(16) + ifinfomsg(16) + two IFLA_IFNAME attributes
         // with unaligned lengths (7 and 9), so a walk must apply NLA_ALIGN to reach the second
         // one; then NLMSG_DONE: nlmsghdr(16) + error code(4). Every length field is stamped
-        // automatically: attributes by unified construction, the top nlmsg_len progressively
-        // by append/advance — no hand-filled lengths, no hand-computed offsets.
+        // automatically: attributes by unified construction, the top nlmsg_len by append —
+        // no hand-filled lengths, no hand-computed offsets.
         Span<byte> datagram = new byte[72];
+        Span<byte> attribute = stackalloc byte[Netlink.Align4(9)];
 
         var message = MutableFlexibleSpan<NlmsgHeader, byte>.Create(
             datagram, new NlmsgHeader { Type = Netlink.RtmNewlink, Seq = 1 });
         message.AppendRange(new byte[Netlink.IfinfomsgSize]);
         MutableFlexibleSpan<NlattrHeader, byte>.Create(
-            datagram[(Netlink.NlmsgHdrlen + message.Length)..], new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
-        message.Advance(Netlink.Align4(7));
+            attribute, new NlattrHeader { Type = Netlink.IflaIfname }, "lo\0"u8);
+        message.AppendRange(attribute[..Netlink.Align4(7)]);
+        attribute.Clear();
         MutableFlexibleSpan<NlattrHeader, byte>.Create(
-            datagram[(Netlink.NlmsgHdrlen + message.Length)..], new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
-        message.Advance(Netlink.Align4(9));
+            attribute, new NlattrHeader { Type = Netlink.IflaIfname }, "eth0\0"u8);
+        message.AppendRange(attribute[..Netlink.Align4(9)]);
         MutableFlexibleSpan<NlmsgHeader, byte>.Create(datagram[52..], new NlmsgHeader { Type = Netlink.NlmsgDone, Seq = 1 }, new byte[4]);
         Assert.Equal(52, (int)message.Header.Len);
 

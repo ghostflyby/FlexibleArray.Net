@@ -259,36 +259,6 @@ public sealed class MutableFlexibleArrayTests
     }
 
     [Fact]
-    public void Advance_CommitsElementsWrittenIntoTheCallersBuffer()
-    {
-        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader(), [1]);
-
-        // The caller addresses the free region in the buffer it supplied, immediately after
-        // the committed tail, builds a nested object there, and commits it.
-        var free = MemoryMarshal.Cast<byte, int>(
-            buffer.AsSpan((int)FlexibleArrayLayout<PacketHeader, int>.FirstElementOffset + array.Length * sizeof(int)));
-        free[0] = 2;
-        free[1] = 3;
-
-        array.Advance(2);
-
-        Assert.Equal(3, array.Length);
-        Assert.Equal(3, array.Header.Count);
-        Assert.Equal(new[] { 1, 2, 3 }, array.Span.Elements.ToArray());
-    }
-
-    [Fact]
-    public void Advance_RejectsCountsBeyondTheCapacity()
-    {
-        var buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-        using var array = MutableFlexibleArray<PacketHeader, int>.Create(buffer, new PacketHeader(), [1]);
-
-        Assert.Throws<ArgumentOutOfRangeException>(() => array.Advance(2));
-        Assert.Throws<ArgumentOutOfRangeException>(() => array.Advance(-1));
-    }
-
-    [Fact]
     public void Mutations_RequireAWriteBack_AndDisposedObjectsRejectThem()
     {
         // With room to spare the bounds checks pass, so the mutation reaches the capability

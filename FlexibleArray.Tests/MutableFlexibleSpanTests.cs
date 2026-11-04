@@ -226,22 +226,6 @@ public sealed class MutableFlexibleSpanTests
     }
 
     [Fact]
-    public void Advance_CommitsInPlaceWrites()
-    {
-        Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
-        var view = MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader { Timestamp = 7 });
-
-        // Write through the free region as if building a nested object, then commit.
-        view.FreeElements[0] = 5;
-        view.FreeElements[1] = 6;
-        view.Advance(2);
-
-        Assert.Equal(2, view.Length);
-        Assert.Equal(2, view.Header.Count);
-        Assert.Equal(new[] { 5, 6 }, view.Elements.ToArray());
-    }
-
-    [Fact]
     public void Truncate_ShrinksLogically_AndReappendOverwrites()
     {
         Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(3)];
@@ -278,16 +262,6 @@ public sealed class MutableFlexibleSpanTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
         {
             Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Advance(1);
-        });
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-        {
-            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
-            MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Advance(-1);
-        });
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-        {
-            Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
             MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Truncate(-1);
         });
         Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -295,6 +269,30 @@ public sealed class MutableFlexibleSpanTests
             Span<byte> buffer = new byte[FlexibleArrayLayout<PacketHeader, int>.GetRequiredBytes(2)];
             MutableFlexibleSpan<PacketHeader, int>.Create(buffer, new PacketHeader(), [1, 2]).Truncate(3);
         });
+    }
+
+    [Fact]
+    public void Append_WithoutAWriteBack_LeavesTheStorageUntouched()
+    {
+        // CStrHeader derives its length by walking to the first zero byte, so writing the
+        // terminator before the capability gate would silently change the object.
+        var buffer = new byte[4];
+        buffer[0] = 1;
+        buffer[1] = 2;
+        var view = MutableFlexibleSpan<CStrHeader, byte>.Create(buffer);
+        Assert.Equal(2, view.Length);
+
+        try
+        {
+            view.Append(3);
+            Assert.Fail("Appending to a header without a write-back must throw.");
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        Assert.Equal(0, buffer[2]);
+        Assert.Equal(2, FlexibleSpan<CStrHeader, byte>.Create(buffer).Length);
     }
 
     [Fact]
@@ -308,12 +306,6 @@ public sealed class MutableFlexibleSpanTests
             Span<byte> buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
             var view = MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 1 }, ['a']);
             view.Append('b');
-        });
-        Assert.Throws<NotSupportedException>(() =>
-        {
-            Span<byte> buffer = new byte[FlexibleArrayLayout<CharHeader, char>.GetRequiredBytes(2)];
-            var view = MutableFlexibleSpan<CharHeader, char>.Create(buffer, new CharHeader { Count = 1 }, ['a']);
-            view.Advance(1);
         });
         Assert.Throws<NotSupportedException>(() =>
         {

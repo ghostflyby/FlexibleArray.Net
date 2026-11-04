@@ -105,26 +105,6 @@ internal sealed unsafe class FlexibleArrayCore<THeader, T>
         _committedLength += items.Length;
     }
 
-    internal void Advance(int elementCount)
-    {
-        ThrowIfDisposed();
-        ArgumentOutOfRangeException.ThrowIfNegative(elementCount);
-        if (elementCount == 0)
-        {
-            return;
-        }
-
-        if (elementCount > Capacity - _committedLength)
-        {
-            throw new ArgumentOutOfRangeException(nameof(elementCount),
-                $"The advance is {elementCount} elements but the free capacity is {Capacity - _committedLength}.");
-        }
-
-        ref var header = ref HeaderReference;
-        FlexibleArrayConstruction.SetLength<THeader, T>(ref header, _committedLength + elementCount);
-        _committedLength += elementCount;
-    }
-
     internal void Truncate(int length)
     {
         ThrowIfDisposed();
