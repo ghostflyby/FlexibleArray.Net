@@ -8,14 +8,46 @@ internal static class FlexibleArrayConstruction
         where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
         where T : unmanaged
     {
-        var constructible = header as IConstructibleFlexibleArrayHeader<THeader, T>;
-        destination = constructible is null ? header : StampVerified(constructible, elements.Length);
+        if (header is IConstructibleFlexibleArrayHeader<THeader, T> constructible)
+        {
+            WriteStampedObject(ref destination, constructible, elements);
+        }
+        else
+        {
+            WriteDeclaredObject(ref destination, header, elements);
+        }
+    }
+
+    // The header registers a write-back, so the library authors the length from the element
+    // count and overwrites whatever the incoming header declared.
+    private static void WriteStampedObject<THeader, T>(
+        ref THeader destination,
+        IConstructibleFlexibleArrayHeader<THeader, T> constructible,
+        ReadOnlySpan<T> elements)
+        where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
+        where T : unmanaged
+    {
+        destination = StampVerified(constructible, elements.Length);
         elements.CopyTo(MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref destination), elements.Length));
-        if (constructible is null && THeader.GetTailElementCount(in destination) != elements.Length)
+    }
+
+    // Without a write-back the declared length is the truth, so a request whose element count
+    // disagrees is rejected before the tail is written.
+    private static void WriteDeclaredObject<THeader, T>(
+        ref THeader destination,
+        in THeader header,
+        ReadOnlySpan<T> elements)
+        where THeader : unmanaged, IFlexibleArrayHeader<THeader, T>
+        where T : unmanaged
+    {
+        destination = header;
+        if (THeader.GetTailElementCount(in destination) != elements.Length)
         {
             throw new ArgumentException(
                 $"The header-declared tail length does not match the {elements.Length} elements provided.");
         }
+
+        elements.CopyTo(MemoryMarshal.CreateSpan(ref THeader.GetFirstElement(ref destination), elements.Length));
     }
 
     internal static void SetLength<THeader, T>(ref THeader header, int newLength)
