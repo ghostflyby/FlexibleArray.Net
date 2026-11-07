@@ -46,7 +46,20 @@ jobs:
         run: dotnet format FlexibleArray.slnx --verify-no-changes --no-restore
 
       - name: Test
-        run: dotnet test FlexibleArray.slnx --no-build --configuration Release
+        # MTP mode: the xunit v3 test assemblies are self-executing
+        # Microsoft.Testing.Platform apps, so the VSTest-era --logger option no
+        # longer exists. --report-trx (provided by
+        # Microsoft.Testing.Extensions.TrxReport, referenced by each test
+        # project) writes one .trx per project into TestResults.
+        run: dotnet test FlexibleArray.slnx --no-build --configuration Release --report-trx --results-directory TestResults
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults
+          if-no-files-found: ignore
 
   # libc diversity: the same source-generated interop against musl instead of glibc.
   build-test-musl:
@@ -59,7 +72,17 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Test
+        # Same TRX reporting as the matrix job; the artifact name has no
+        # matrix.os to interpolate, so it is fixed to the libc under test.
         run: |
-          ICU_DIR=/usr/lib dotnet test FlexibleArray.slnx --configuration Release
+          ICU_DIR=/usr/lib dotnet test FlexibleArray.slnx --configuration Release --report-trx --results-directory TestResults
         env:
           DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: 'true'
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-musl
+          path: TestResults
+          if-no-files-found: ignore
